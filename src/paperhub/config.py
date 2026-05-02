@@ -13,7 +13,12 @@ from platformdirs import user_cache_path
 from pydantic import Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
-from .agents.base import DEFAULT_MODELS, default_model_for_provider, infer_provider_from_model
+from .agents.base import (
+    DEFAULT_MODELS,
+    DEFAULT_PROVIDER,
+    default_model_for_provider,
+    infer_provider_from_model,
+)
 
 
 class Settings(BaseSettings):
@@ -31,7 +36,7 @@ class Settings(BaseSettings):
     openai_api_key: str | None = Field(default=None, alias="OPENAI_API_KEY")
     google_api_key: str | None = Field(default=None, alias="GOOGLE_API_KEY")
 
-    paperhub_provider: str = Field(default="anthropic", alias="PAPERHUB_PROVIDER")
+    paperhub_provider: str = Field(default=DEFAULT_PROVIDER, alias="PAPERHUB_PROVIDER")
     paperhub_model: str | None = Field(default=None, alias="PAPERHUB_MODEL")
     paperhub_anthropic_model: str = Field(
         default=DEFAULT_MODELS["anthropic"],
@@ -68,7 +73,7 @@ class Settings(BaseSettings):
         model id to OpenAI when `PAPERHUB_PROVIDER=openai`.
         """
 
-        chosen = (provider or self.paperhub_provider or "anthropic").lower()
+        chosen = (provider or self.paperhub_provider or DEFAULT_PROVIDER).lower()
         if self.paperhub_model:
             inferred = infer_provider_from_model(self.paperhub_model)
             if inferred is None or inferred == chosen:

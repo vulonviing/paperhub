@@ -1,4 +1,4 @@
-"""Anthropic LLM client (default provider).
+"""Anthropic LLM client (optional provider).
 
 Uses the official `anthropic` SDK. Imported lazily by `build_llm` so this file
 is only loaded when the user actually picks Anthropic.

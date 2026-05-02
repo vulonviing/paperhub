@@ -1,47 +1,47 @@
-"""CLI smoke tests using Click's test runner."""
+"""Smoke tests for the interactive CLI module."""
 
 from __future__ import annotations
 
-from click.testing import CliRunner
-
-from paperhub.cli import main
+from paperhub.interactive_cli import main, parse_date_args
 
 
-def test_cli_no_args_exits_with_help() -> None:
-    runner = CliRunner()
-    result = runner.invoke(main, [])
-    assert result.exit_code == 2
-    assert "Usage" in result.output or "Usage" in (result.stderr or "")
+def test_interactive_cli_is_importable() -> None:
+    assert callable(main)
 
 
-def test_cli_no_args_can_be_turkish() -> None:
-    runner = CliRunner()
-    result = runner.invoke(main, ["--language", "tr"])
-    assert result.exit_code == 2
-    assert "Kullanım" in result.output or "Kullanım" in (result.stderr or "")
+def test_parse_date_month() -> None:
+    period, year, month, day, week, start, end = parse_date_args(["2026-05"])
+    assert period == "month"
+    assert year == 2026
+    assert month == 5
+    assert day is None
 
 
-def test_cli_unparseable_query_exits_2() -> None:
-    runner = CliRunner()
-    result = runner.invoke(main, ["asdfasdf"])
-    assert result.exit_code == 2
+def test_parse_date_year() -> None:
+    period, year, month, day, week, start, end = parse_date_args(["2026"])
+    assert period == "year"
+    assert year == 2026
 
 
-def test_cli_missing_provider_key_exits_3(monkeypatch) -> None:
-    monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
-    monkeypatch.delenv("OPENAI_API_KEY", raising=False)
-    monkeypatch.delenv("GOOGLE_API_KEY", raising=False)
-    runner = CliRunner()
-    result = runner.invoke(main, ["mayis 2026 top 3"])
-    assert result.exit_code == 3
-    assert "API key" in (result.stderr or "") + (result.output or "")
+def test_parse_date_day() -> None:
+    period, year, month, day, week, start, end = parse_date_args(["2026-05-15"])
+    assert period == "day"
+    assert year == 2026
+    assert month == 5
+    assert day == 15
 
 
-def test_cli_missing_provider_key_can_be_turkish(monkeypatch) -> None:
-    monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
-    monkeypatch.delenv("OPENAI_API_KEY", raising=False)
-    monkeypatch.delenv("GOOGLE_API_KEY", raising=False)
-    runner = CliRunner()
-    result = runner.invoke(main, ["--language", "tr", "mayis 2026 top 3"])
-    assert result.exit_code == 3
-    assert "API anahtarı" in (result.stderr or "") + (result.output or "")
+def test_parse_date_week() -> None:
+    period, year, month, day, week, start, end = parse_date_args(["2026-W18"])
+    assert period == "week"
+    assert year == 2026
+    assert week == 18
+
+
+def test_parse_date_custom_range() -> None:
+    from datetime import date
+
+    period, year, month, day, week, start, end = parse_date_args(["2026-05-01", "2026-05-31"])
+    assert period == "custom"
+    assert start == date(2026, 5, 1)
+    assert end == date(2026, 5, 31)

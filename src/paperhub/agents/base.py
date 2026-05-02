@@ -2,7 +2,7 @@
 
 `PaperAgent` only depends on this `LLMClient` protocol — the agent never
 imports a provider SDK directly. Provider selection happens here, lazily, so
-that missing extras (openai, google) never break import.
+that missing optional extras (anthropic, google) never break import.
 """
 
 from __future__ import annotations
@@ -15,6 +15,7 @@ DEFAULT_MODELS = {
     "openai": "gpt-4o-mini",
     "google": "gemini-2.5-pro",
 }
+DEFAULT_PROVIDER = "openai"
 
 
 @runtime_checkable
@@ -54,14 +55,14 @@ def infer_provider_from_model(model: str | None) -> str | None:
 def default_model_for_provider(provider: str | None) -> str:
     """Return the built-in default model for a provider."""
 
-    normalized = (provider or "anthropic").lower()
-    return DEFAULT_MODELS.get(normalized, DEFAULT_MODELS["anthropic"])
+    normalized = (provider or DEFAULT_PROVIDER).lower()
+    return DEFAULT_MODELS.get(normalized, DEFAULT_MODELS[DEFAULT_PROVIDER])
 
 
 def _normalize_provider(model: str | None, provider: str | None) -> str:
     if provider:
         return provider.lower()
-    return infer_provider_from_model(model) or "anthropic"
+    return infer_provider_from_model(model) or DEFAULT_PROVIDER
 
 
 def build_llm(

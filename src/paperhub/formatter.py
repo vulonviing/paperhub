@@ -8,7 +8,7 @@ from .dates import pretty_period
 from .localization import OutputLanguage, normalize_language
 from .models import PaperSummary, RunRequest
 
-_LABELS: dict[OutputLanguage, dict[str, str]] = {
+LABELS: dict[OutputLanguage, dict[str, str]] = {
     "en": {
         "paper_unit": "papers",
         "error": "Error",
@@ -38,7 +38,7 @@ def render_markdown(summaries: Iterable[PaperSummary], request: RunRequest) -> s
     """Build the Markdown string used for Jupyter rendering and Markdown export."""
 
     summaries = list(summaries)
-    labels = _LABELS[normalize_language(request.language)]
+    labels = LABELS[normalize_language(request.language)]
     header = f"# PaperHub - {pretty_period(request)} · {len(summaries)} {labels['paper_unit']}"
     blocks: list[str] = [header]
 
@@ -69,7 +69,7 @@ def render_plain(summaries: Iterable[PaperSummary], request: RunRequest) -> str:
     """Plain-text rendering for non-notebook environments."""
 
     summaries = list(summaries)
-    labels = _LABELS[normalize_language(request.language)]
+    labels = LABELS[normalize_language(request.language)]
     lines: list[str] = []
     title = f"PaperHub - {pretty_period(request)} · {len(summaries)} {labels['paper_unit']}"
     lines.append(title)

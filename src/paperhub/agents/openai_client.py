@@ -1,4 +1,4 @@
-"""OpenAI LLM client (optional extra)."""
+"""OpenAI LLM client (default provider)."""
 
 from __future__ import annotations
 
@@ -28,10 +28,8 @@ class OpenAIClient:
             )
         try:
             from openai import AsyncOpenAI
-        except Exception as exc:  # pragma: no cover - extra not installed
-            raise RuntimeError(
-                "Install the 'openai' extra to use OpenAIClient: pip install paperhub[openai]"
-            ) from exc
+        except Exception as exc:  # pragma: no cover - dependency missing
+            raise RuntimeError("The 'openai' package is required for OpenAIClient.") from exc
         self._client = AsyncOpenAI(api_key=self._api_key)
 
     async def complete(

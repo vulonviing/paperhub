@@ -1,27 +1,25 @@
 # PaperHub
 
-PaperHub fetches HuggingFace Daily Papers by natural-language or programmatic
-date filters, assigns each paper to its own AI summarization agent, and
-renders English, Jupyter-friendly summaries by default. Turkish output is
-available with `language="tr"` or `--language tr`.
+PaperHub fetches HuggingFace Daily Papers by programmatic date filters, assigns
+each paper to its own AI summarization agent, and renders English, Jupyter-friendly
+summaries by default. Turkish output is available with `language="tr"`.
 
-```python
-from paperhub import PaperHub
+Two ways to use PaperHub:
 
-PaperHub().run("may 2026 top 10 papers")
-```
+1. **Terminal CLI** (`paperhub`) — interactive launcher with a REPL interface. **Primary mode.**
+2. **Python / Jupyter** — import `PaperHub` and call `hub.run(...)` directly.
 
 ## Install
 
 ```bash
-python -m pip install -e ".[dev]"
+python3 -m pip install -e ".[dev]"
 ```
 
 Optional provider extras:
 
 ```bash
-python -m pip install -e ".[openai]"     # adds the OpenAI client
-python -m pip install -e ".[google]"     # adds the Google Gemini client
+python3 -m pip install -e ".[anthropic]"  # adds the Anthropic client
+python3 -m pip install -e ".[google]"     # adds the Google Gemini client
 ```
 
 ## Environment Variables
@@ -35,62 +33,92 @@ cp .env.example .env
 
 | Variable                       | Purpose                                       |
 |--------------------------------|-----------------------------------------------|
-| `ANTHROPIC_API_KEY`            | Default provider key                          |
-| `OPENAI_API_KEY`               | Optional, used when `--provider openai`       |
+| `OPENAI_API_KEY`               | Default provider key                          |
+| `ANTHROPIC_API_KEY`            | Optional, used when `--provider anthropic`    |
 | `GOOGLE_API_KEY`               | Optional, used when `--provider google`       |
-| `PAPERHUB_PROVIDER`            | Override default provider (default: anthropic)|
+| `PAPERHUB_PROVIDER`            | Override default provider (default: openai)   |
 | `PAPERHUB_MODEL`               | Optional global model override                |
-| `PAPERHUB_ANTHROPIC_MODEL`     | Anthropic default model (default: claude-3-5-haiku-20241022)|
 | `PAPERHUB_OPENAI_MODEL`        | OpenAI default model (default: gpt-4o-mini)   |
+| `PAPERHUB_ANTHROPIC_MODEL`     | Anthropic default model (default: claude-3-5-haiku-20241022)|
 | `PAPERHUB_GOOGLE_MODEL`        | Google default model (default: gemini-2.5-pro)|
 | `PAPERHUB_CONCURRENCY`         | Max concurrent paper agents (default: 5)      |
 | `PAPERHUB_MAX_PDF_CHARS`       | Truncation cap for PDF text (default: 60000)  |
 | `PAPERHUB_CACHE_DIR`           | Override the on-disk cache location           |
 
-## Quickstart
+## Terminal CLI (Primary)
 
-### Notebook
+Start the interactive launcher:
 
-For a step-by-step notebook that covers installation, API keys, readiness
-checks, metadata smoke tests, and the first live `PaperHub.run(...)` call, open
-`examples/03_jupyter_quickstart.ipynb`.
-
-```python
-from paperhub import PaperHub
-
-hub = PaperHub()
-hub.run("may 2026 top 10 papers")
+```bash
+paperhub
 ```
 
-The notebook cell renders one section per paper with motivation, method,
-findings, concrete real-world examples, and a summary capped at 6000
-characters. Turkish readers can open
-`examples/03_jupyter_quickstart_tr.ipynb`.
+The launcher opens a REPL with a status dashboard showing the current provider,
+model, API key state, date range, and top paper count. Use commands to configure
+and run:
 
-### Turkish Output
-
-```python
-from paperhub import PaperHub
-
-hub = PaperHub(language="tr")
-hub.run("mayis 2026 top 10 paper")
+```text
+/provider
+/provider openai
+/model
+/model gpt-4o-mini
+/model default
+/language
+/date 2026-05
+/date 2026-05-15
+/date 2026-W18
+/date 2026-05-01 2026-05-31
+/top 5
+/metadata
+/run
+/api-keys
+/quit
 ```
 
-You can also choose Turkish per call:
+### Date formats for `/date`
 
-```python
-hub.run("today top 5", language="tr")
+| Example                        | Period   | Description           |
+|-------------------------------|----------|-----------------------|
+| `/date 2026-05`               | month    | May 2026              |
+| `/date 2026`                  | year     | Full year 2026        |
+| `/date 2026-05-15`            | day      | Single day            |
+| `/date 2026-W18`              | week     | ISO week 18 of 2026   |
+| `/date 2026-05-01 2026-05-31` | custom   | Inclusive date range  |
+
+`/metadata` fetches HuggingFace paper metadata only and does not call an LLM.
+If the selected provider key is missing, `/run` prints setup guidance and the
+launcher can render `docs/API_KEYS.md` with `/api-keys`.
+
+You can also pass startup flags:
+
+```bash
+paperhub --provider anthropic
+paperhub --model claude-3-5-haiku-20241022
+paperhub --language tr
+paperhub --top-n 10
 ```
 
-### Programmatic
+## Python / Jupyter API
 
 ```python
 from datetime import date
 from paperhub import PaperHub
 
-hub = PaperHub()
+hub = PaperHub(provider="openai")
+
+# Month
 hub.run(period="month", year=2026, month=5, top_n=10)
+
+# Single day
+hub.run(period="day", year=2026, month=5, day=1, top_n=5)
+
+# ISO week
 hub.run(period="week", year=2026, week=18, top_n=5)
+
+# Full year
+hub.run(period="year", year=2026, top_n=20)
+
+# Custom range
 hub.run(period="custom", start=date(2026, 4, 15), end=date(2026, 4, 30), top_n=15)
 ```
 
@@ -98,38 +126,41 @@ hub.run(period="custom", start=date(2026, 4, 15), end=date(2026, 4, 30), top_n=1
 `display=False` and call `render_plain` yourself if you do not need the
 Markdown side effect.
 
-### CLI
+### Turkish Output
 
-```bash
-paperhub "may 2026 top 10 papers"
-paperhub "this month top 5"
-paperhub "2026-05-01 to 2026-05-31 top 5"
-paperhub --provider openai --model gpt-4o-mini "may 2026 top 3"
-paperhub --language tr "mayis 2026 top 3"
-paperhub --no-summarize "may 2026 top 5"   # metadata only, no LLM call
+```python
+from paperhub import PaperHub
+
+hub = PaperHub(language="tr")
+hub.run(period="month", year=2026, month=5, top_n=10)
 ```
 
-If the selected provider's API key is missing, the CLI prints a clear message
-and exits with code 3 instead of crashing. Use `--no-summarize` to verify the
-fetch pipeline without an LLM key.
+Per-call language override:
+
+```python
+hub.run(period="day", year=2026, month=5, day=1, top_n=5, language="tr")
+```
+
+For a step-by-step notebook, open `examples/03_jupyter_quickstart.ipynb`
+(English) or `examples/03_jupyter_quickstart_tr.ipynb` (Turkish).
 
 ## Provider Selection
 
 ```python
-PaperHub(model="claude-3-5-haiku-20241022") # Anthropic Haiku (default)
-PaperHub(provider="openai")                 # Uses OpenAI default model
-PaperHub(model="gpt-4o-mini", provider="openai")
+PaperHub(provider="openai")                             # OpenAI default model
+PaperHub(provider="openai", model="gpt-4o-mini")
+PaperHub(provider="anthropic")                          # Anthropic default model
+PaperHub(model="claude-3-5-haiku-20241022", provider="anthropic")
 PaperHub(model="gemini-2.5-pro", provider="google")
 ```
 
 If `model` is omitted, PaperHub picks the selected provider's default model.
 Provider-specific `.env` values such as `PAPERHUB_OPENAI_MODEL` override those
-defaults. `PAPERHUB_MODEL` remains available as a global override, but a model
-id that clearly belongs to another provider is ignored for the selected
-provider.
+defaults. `PAPERHUB_MODEL` remains available as a global override.
 
-Provider SDKs are imported lazily — installing `paperhub` does not require
-the OpenAI or Google packages unless you actually use those providers.
+Provider SDKs are imported lazily — installing `paperhub` includes OpenAI by
+default, and does not require Anthropic or Google packages unless you use those
+providers.
 
 ## Caching
 
@@ -147,29 +178,15 @@ A second invocation with the same papers and model:
 ## Tests, Lint, Typecheck, Build
 
 ```bash
-python -m pytest          # unit tests, no live network or LLM keys needed
-python -m ruff check .
-python -m ruff format --check .
-python -m mypy src tests
-python -m build           # build wheel + sdist
+python3 -m pytest          # unit tests, no live network or LLM keys needed
+python3 -m ruff check .
+python3 -m ruff format --check .
+python3 -m mypy src tests
+python3 -m build           # build wheel + sdist
 ```
 
 The unit tests use a fake LLM client and `httpx.MockTransport`; no real
 provider keys are required.
-
-## Repository Scope
-
-The repository is kept to the files needed to install, use, test, and
-understand the package:
-
-- `src/paperhub/` for runtime package code.
-- `tests/` for the mocked test suite.
-- `docs/ARCHITECTURE.md` for implementation notes.
-- `examples/` for clean, re-runnable examples.
-- `.env.example` as a visible environment template.
-
-Local secrets, build outputs, caches, downloaded PDFs, maintainer-only notes,
-and one-off project scaffolding are excluded with `.gitignore`.
 
 ## Project Layout
 
@@ -179,29 +196,27 @@ src/paperhub/
   config.py             # Settings (pydantic-settings)
   models.py             # PaperMeta, PaperSummary, RunRequest
   dates.py              # period → (start, end)
-  nl_parser.py          # English/Turkish NL → RunRequest
   fetchers/             # HF JSON API (default) + HTML fallback
   pdf/                  # arXiv download + text extraction
   agents/               # LLMClient protocol + provider clients + PaperAgent
   orchestrator.py       # asyncio.Semaphore parallelism
   cache.py              # SQLite cache
   formatter.py          # Markdown / plain-text rendering
-  cli.py                # `paperhub` entrypoint
+  interactive_cli.py    # `paperhub` interactive launcher
 tests/                  # pytest suite, mocked HTTP and fake LLM
 docs/ARCHITECTURE.md
-examples/01_quickstart.py
-examples/02_programmatic.py
+docs/HOW_TO_START.md
+docs/API_KEYS.md
+examples/README.md
 examples/03_jupyter_quickstart.ipynb
 examples/03_jupyter_quickstart_tr.ipynb
 ```
 
 ## Troubleshooting
 
-- *“Could not parse query”*: try ASCII forms (`mayis 2026 top 10`) or an ISO
-  date (`2026-05-15`).
-- *“No papers found”*: HuggingFace may not yet have published Daily Papers
-  for that date. Try `--no-summarize` to confirm that the fetcher is hitting
-  the API at all.
+- *"No papers found"*: HuggingFace may not yet have published Daily Papers
+  for that date. Use `/metadata` in the interactive launcher to check the
+  fetcher without an LLM call.
 - *PDF text comes back tiny*: some arXiv PDFs use unusual layouts. PaperHub
   falls back to `pdfplumber`; if both extractors are short, the agent will
   pass through the abstract as the input text instead of failing.

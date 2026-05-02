@@ -11,7 +11,7 @@ from typing import Any, cast, get_args
 
 import httpx
 
-from .agents.base import LLMClient, build_llm
+from .agents.base import DEFAULT_PROVIDER, LLMClient, build_llm
 from .cache import Cache
 from .config import Settings, load_settings
 from .dates import resolve_range
@@ -19,7 +19,6 @@ from .fetchers import HFAPIFetcher, HFHtmlFetcher, papers_in_range
 from .formatter import display_summaries, render_markdown, render_plain
 from .localization import OutputLanguage, normalize_language
 from .models import PaperMeta, PaperSummary, Period, RunRequest
-from .nl_parser import parse as parse_query
 from .orchestrator import run_all
 
 __all__ = [
@@ -32,7 +31,6 @@ __all__ = [
     "build_llm",
     "load_settings",
     "normalize_language",
-    "parse_query",
     "render_markdown",
     "render_plain",
 ]
@@ -77,7 +75,6 @@ class PaperHub:
 
     def run(
         self,
-        query: str | None = None,
         *,
         period: str | None = None,
         year: int | None = None,
@@ -91,7 +88,7 @@ class PaperHub:
         display: bool = True,
         plain: bool = False,
     ) -> list[PaperSummary]:
-        """Execute the full pipeline for a query (NL or programmatic).
+        """Execute the full pipeline for a programmatic date request.
 
         - `display=True` renders Markdown in Jupyter; otherwise it just
           returns the summary list and the Markdown is available via
@@ -100,7 +97,6 @@ class PaperHub:
         """
 
         request = self._build_request(
-            query=query,
             period=period,
             year=year,
             month=month,
@@ -118,18 +114,16 @@ class PaperHub:
 
     async def arun(
         self,
-        query: str | None = None,
         **kwargs: Any,
     ) -> list[PaperSummary]:
         """Async variant of `run` for use inside an existing event loop."""
 
-        request = self._build_request(query=query, **kwargs)
+        request = self._build_request(**kwargs)
         return await self._run_async(request)
 
     def _build_request(
         self,
         *,
-        query: str | None,
         period: str | None = None,
         year: int | None = None,
         month: int | None = None,
@@ -141,13 +135,10 @@ class PaperHub:
         language: str | None = None,
     ) -> RunRequest:
         request_language = normalize_language(language or self.language)
-        if query:
-            parsed = parse_query(query)
-            if top_n is not None:
-                parsed = parsed.model_copy(update={"top_n": top_n})
-            return parsed.model_copy(update={"language": request_language})
         if period is None:
-            raise ValueError("Provide either a query string or period=...")
+            raise ValueError(
+                "Provide period= (e.g. period='month', year=2026, month=5)"
+            )
         if period not in get_args(Period):
             allowed = ", ".join(get_args(Period))
             raise ValueError(f"period must be one of: {allowed}")
@@ -189,7 +180,7 @@ class PaperHub:
             )
 
     def _settings_api_key(self, provider: str) -> str | None:
-        provider = (provider or "anthropic").lower()
+        provider = (provider or DEFAULT_PROVIDER).lower()
         return {
             "anthropic": self.settings.anthropic_api_key,
             "openai": self.settings.openai_api_key,

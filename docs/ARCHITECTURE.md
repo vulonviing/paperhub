@@ -6,10 +6,10 @@ the user-facing workflow in `README.md`.
 ## Components
 
 ```
-            user query / args
+            programmatic args (period, year, month, …)
                     │
                     ▼
-              nl_parser.parse  ──► RunRequest
+              RunRequest
                     │
                     ▼
            dates.resolve_range  ──► (start, end)
@@ -32,7 +32,7 @@ the user-facing workflow in `README.md`.
                     ▼  list[PaperSummary]
                 formatter
               ├─ render_markdown (Jupyter)
-              └─ render_plain (CLI)
+              └─ render_plain (terminal launcher)
 ```
 
 ## Boundaries
@@ -64,7 +64,7 @@ PaperHub defaults to English output. The public entrypoints accept
 
 - `PaperHub(language="tr")` sets the default for an instance.
 - `hub.run(..., language="tr")` sets it for a single call.
-- `paperhub --language tr ...` sets it for the CLI.
+- `/language` sets it in the interactive launcher.
 
 The selected language is stored on `RunRequest` and passed through the
 formatter, orchestrator, and `PaperAgent`. Prompt templates are selected in
@@ -111,9 +111,11 @@ ignored so that a Claude model id is not sent to OpenAI or Google.
 
 ## Why these tradeoffs
 
-- Choosing Anthropic as the default keeps the base install useful out of the
-  box for the maintainers' primary workflow. OpenAI/Google are extras to
-  avoid forcing users to install three SDKs.
+- Choosing OpenAI as the default keeps the base install aligned with the
+  default interactive launcher workflow. Anthropic/Google are extras to avoid
+  forcing users to install three SDKs.
 - Hatchling as the build backend matches the PEP 621 manifest with no plugin
   configuration.
 - SQLite avoids a service dependency and survives ~100k papers comfortably.
+- Date input is strictly programmatic (period/year/month/…) — this eliminates
+  a parsing layer and makes the API predictable for both code and the REPL.
