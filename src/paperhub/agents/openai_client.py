@@ -1,0 +1,61 @@
+"""OpenAI LLM client (optional extra)."""
+
+from __future__ import annotations
+
+import os
+from collections.abc import Iterable
+from typing import Any
+
+
+class OpenAIAuthError(RuntimeError):
+    """Raised when no OpenAI API key is configured at call time."""
+
+
+class OpenAIClient:
+    provider = "openai"
+
+    def __init__(self, *, model: str = "gpt-4o-mini", api_key: str | None = None):
+        self.model = model
+        self._api_key = api_key or os.environ.get("OPENAI_API_KEY")
+        self._client: Any = None
+
+    def _ensure_client(self) -> None:
+        if self._client is not None:
+            return
+        if not self._api_key:
+            raise OpenAIAuthError(
+                "OPENAI_API_KEY is not set. Set the env var or pass api_key=... ."
+            )
+        try:
+            from openai import AsyncOpenAI
+        except Exception as exc:  # pragma: no cover - extra not installed
+            raise RuntimeError(
+                "Install the 'openai' extra to use OpenAIClient: pip install paperhub[openai]"
+            ) from exc
+        self._client = AsyncOpenAI(api_key=self._api_key)
+
+    async def complete(
+        self,
+        *,
+        system: str,
+        messages: Iterable[dict[str, str]],
+        max_tokens: int = 2048,
+        temperature: float = 0.3,
+    ) -> str:
+        self._ensure_client()
+        assert self._client is not None
+        msg_list: list[dict[str, str]] = [{"role": "system", "content": system}]
+        for m in messages:
+            msg_list.append({"role": m.get("role", "user"), "content": m.get("content", "")})
+        response = await self._client.chat.completions.create(
+            model=self.model,
+            messages=msg_list,
+            temperature=temperature,
+            max_tokens=max_tokens,
+            response_format={"type": "json_object"},
+        )
+        choices = getattr(response, "choices", []) or []
+        if not choices:
+            return ""
+        message = getattr(choices[0], "message", None)
+        return (getattr(message, "content", "") or "").strip()

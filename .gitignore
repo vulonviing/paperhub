@@ -1,0 +1,59 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.egg-info/
+.eggs/
+*.egg
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+dist/
+build/
+.tox/
+.nox/
+.coverage
+.coverage.*
+coverage.xml
+htmlcov/
+site/
+.venv/
+venv/
+env/
+
+# PaperHub runtime artifacts
+.paperhub/
+*.sqlite
+*.sqlite3
+*.db
+*.pdf
+
+# Jupyter
+.ipynb_checkpoints/
+
+# Development-only AI / agent scaffolding
+.claude/
+.codex/
+.cursor/
+.continue/
+.aider*
+.mcp.json
+CLAUDE.md
+CLAUDE.local.md
+START_PROMPT.md
+SETUP.md
+starter-template/
+paperhub_roadmap.md
+docs/PUBLISHING.md
+
+# Secrets
+.env
+.env.*
+!.env.example
+*.pem
+secrets/
+
+# OS/editor
+.DS_Store
+.idea/
+.vscode/
