@@ -1,8 +1,8 @@
 # PaperHub
 
 PaperHub fetches HuggingFace Daily Papers by programmatic date filters, assigns
-each paper to its own AI summarization agent, and renders English, Jupyter-friendly
-summaries by default. Turkish output is available with `language="tr"`.
+each paper to its own AI summarization agent, and renders Jupyter-friendly
+summaries by default.
 
 Two ways to use PaperHub:
 
@@ -31,19 +31,20 @@ the project root). Copy `.env.example` to `.env` to start:
 cp .env.example .env
 ```
 
-| Variable                       | Purpose                                       |
-|--------------------------------|-----------------------------------------------|
-| `OPENAI_API_KEY`               | Default provider key                          |
-| `ANTHROPIC_API_KEY`            | Optional, used when `--provider anthropic`    |
-| `GOOGLE_API_KEY`               | Optional, used when `--provider google`       |
-| `PAPERHUB_PROVIDER`            | Override default provider (default: openai)   |
-| `PAPERHUB_MODEL`               | Optional global model override                |
-| `PAPERHUB_OPENAI_MODEL`        | OpenAI default model (default: gpt-4o-mini)   |
-| `PAPERHUB_ANTHROPIC_MODEL`     | Anthropic default model (default: claude-3-5-haiku-20241022)|
-| `PAPERHUB_GOOGLE_MODEL`        | Google default model (default: gemini-2.5-pro)|
-| `PAPERHUB_CONCURRENCY`         | Max concurrent paper agents (default: 5)      |
-| `PAPERHUB_MAX_PDF_CHARS`       | Truncation cap for PDF text (default: 60000)  |
-| `PAPERHUB_CACHE_DIR`           | Override the on-disk cache location           |
+| Variable                           | Purpose                                                       |
+|------------------------------------|---------------------------------------------------------------|
+| `OPENAI_API_KEY`                   | Default provider key                                          |
+| `ANTHROPIC_API_KEY`                | Optional, used when `--provider anthropic`                    |
+| `GOOGLE_API_KEY`                   | Optional, used when `--provider google`                       |
+| `PAPERHUB_PROVIDER`                | Override default provider (default: openai)                   |
+| `PAPERHUB_MODEL`                   | Optional global model override                                |
+| `PAPERHUB_OPENAI_MODEL`            | OpenAI default model (default: gpt-5.4-mini)                  |
+| `PAPERHUB_OPENAI_REASONING_EFFORT` | OpenAI reasoning effort (default: xhigh)                      |
+| `PAPERHUB_ANTHROPIC_MODEL`         | Anthropic default model (default: claude-haiku-4-5-20251001)  |
+| `PAPERHUB_GOOGLE_MODEL`            | Google default model (default: gemini-3-flash-preview)        |
+| `PAPERHUB_CONCURRENCY`             | Max concurrent paper agents (default: 5)                      |
+| `PAPERHUB_MAX_PDF_CHARS`           | Truncation cap for PDF text (default: 60000)                  |
+| `PAPERHUB_CACHE_DIR`               | Override the on-disk cache location                           |
 
 ## Terminal CLI (Primary)
 
@@ -61,7 +62,7 @@ and run:
 /provider
 /provider openai
 /model
-/model gpt-4o-mini
+/model gpt-5.4-mini
 /model default
 /language
 /date 2026-05
@@ -93,8 +94,7 @@ You can also pass startup flags:
 
 ```bash
 paperhub --provider anthropic
-paperhub --model claude-3-5-haiku-20241022
-paperhub --language tr
+paperhub --model claude-haiku-4-5-20251001
 paperhub --top-n 10
 ```
 
@@ -126,37 +126,23 @@ hub.run(period="custom", start=date(2026, 4, 15), end=date(2026, 4, 30), top_n=1
 `display=False` and call `render_plain` yourself if you do not need the
 Markdown side effect.
 
-### Turkish Output
-
-```python
-from paperhub import PaperHub
-
-hub = PaperHub(language="tr")
-hub.run(period="month", year=2026, month=5, top_n=10)
-```
-
-Per-call language override:
-
-```python
-hub.run(period="day", year=2026, month=5, day=1, top_n=5, language="tr")
-```
-
-For a step-by-step notebook, open `examples/03_jupyter_quickstart.ipynb`
-(English) or `examples/03_jupyter_quickstart_tr.ipynb` (Turkish).
+For a step-by-step notebook, open `examples/03_jupyter_quickstart.ipynb`.
 
 ## Provider Selection
 
 ```python
 PaperHub(provider="openai")                             # OpenAI default model
-PaperHub(provider="openai", model="gpt-4o-mini")
+PaperHub(provider="openai", model="gpt-5.4-mini")
 PaperHub(provider="anthropic")                          # Anthropic default model
-PaperHub(model="claude-3-5-haiku-20241022", provider="anthropic")
-PaperHub(model="gemini-2.5-pro", provider="google")
+PaperHub(model="claude-haiku-4-5-20251001", provider="anthropic")
+PaperHub(model="gemini-3-flash-preview", provider="google")
 ```
 
 If `model` is omitted, PaperHub picks the selected provider's default model.
 Provider-specific `.env` values such as `PAPERHUB_OPENAI_MODEL` override those
-defaults. `PAPERHUB_MODEL` remains available as a global override.
+defaults. `PAPERHUB_MODEL` remains available as a global override. OpenAI uses
+`PAPERHUB_OPENAI_REASONING_EFFORT=xhigh` by default; set it to an empty value
+to let the OpenAI API choose its model default.
 
 Provider SDKs are imported lazily — installing `paperhub` includes OpenAI by
 default, and does not require Anthropic or Google packages unless you use those
@@ -209,7 +195,6 @@ docs/HOW_TO_START.md
 docs/API_KEYS.md
 examples/README.md
 examples/03_jupyter_quickstart.ipynb
-examples/03_jupyter_quickstart_tr.ipynb
 ```
 
 ## Troubleshooting

@@ -10,6 +10,8 @@ import os
 from collections.abc import Iterable
 from typing import Any
 
+from .base import DEFAULT_MODELS
+
 
 class AnthropicAuthError(RuntimeError):
     """Raised when no Anthropic API key is configured at call time."""
@@ -18,7 +20,7 @@ class AnthropicAuthError(RuntimeError):
 class AnthropicClient:
     provider = "anthropic"
 
-    def __init__(self, *, model: str = "claude-3-5-haiku-20241022", api_key: str | None = None):
+    def __init__(self, *, model: str = DEFAULT_MODELS["anthropic"], api_key: str | None = None):
         self.model = model
         self._api_key = api_key or os.environ.get("ANTHROPIC_API_KEY")
         self._client: Any = None

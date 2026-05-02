@@ -16,7 +16,7 @@ Inside the launcher, type `/help` to see the command list. Common commands:
 /provider
 /provider openai
 /model
-/model gpt-4o-mini
+/model gpt-5.4-mini
 /language
 /date 2026-05
 /date 2026-05-15
@@ -47,5 +47,4 @@ provider's API key.
 
 ## Notebook Quickstarts
 
-- `03_jupyter_quickstart.ipynb`: English notebook quickstart.
-- `03_jupyter_quickstart_tr.ipynb`: Turkish notebook quickstart.
+- `03_jupyter_quickstart.ipynb`: notebook quickstart.

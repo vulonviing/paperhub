@@ -6,6 +6,8 @@ import os
 from collections.abc import Iterable
 from typing import Any
 
+from .base import DEFAULT_MODELS
+
 
 class GoogleAuthError(RuntimeError):
     """Raised when no Google API key is configured at call time."""
@@ -14,7 +16,7 @@ class GoogleAuthError(RuntimeError):
 class GoogleClient:
     provider = "google"
 
-    def __init__(self, *, model: str = "gemini-2.5-pro", api_key: str | None = None):
+    def __init__(self, *, model: str = DEFAULT_MODELS["google"], api_key: str | None = None):
         self.model = model
         self._api_key = api_key or os.environ.get("GOOGLE_API_KEY")
         self._client: Any = None

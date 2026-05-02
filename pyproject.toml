@@ -4,13 +4,16 @@ build-backend = "hatchling.build"
 
 [project]
 name = "paperhub"
-version = "0.1.0"
-description = "Fetch HuggingFace Daily Papers and produce English, Jupyter-friendly AI summaries with optional Turkish output — one paper, one agent."
+version = "0.1.1"
+description = "Fetch HuggingFace Daily Papers and produce Jupyter-friendly AI summaries — one paper, one agent."
 readme = "README.md"
 requires-python = ">=3.10"
 license = { text = "MIT" }
 authors = [
-    { name = "PaperHub maintainers" },
+    { name = "Emrecan Ulu", email = "emrecanulu19@gmail.com" },
+]
+maintainers = [
+    { name = "Emrecan Ulu", email = "emrecanulu@outlook.com" },
 ]
 keywords = ["huggingface", "papers", "arxiv", "llm", "summarization"]
 classifiers = [
@@ -34,7 +37,7 @@ dependencies = [
     "pdfplumber>=0.11",
     "pydantic>=2",
     "pydantic-settings>=2",
-    "openai>=1.40",
+    "openai>=2.32",
     "rich>=13",
     "ipython>=8",
     "python-dateutil>=2.9",
@@ -42,8 +45,8 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
-anthropic = ["anthropic>=0.40"]
-google = ["google-genai>=0.3"]
+anthropic = ["anthropic>=0.95"]
+google = ["google-genai>=1.56"]
 dev = [
     "pytest>=8",
     "pytest-asyncio>=0.23",
@@ -57,8 +60,8 @@ dev = [
 paperhub = "paperhub.interactive_cli:main"
 
 [project.urls]
-Homepage = "https://github.com/paperhub/paperhub"
-Issues = "https://github.com/paperhub/paperhub/issues"
+Homepage = "https://github.com/vulonviing/paperhub"
+Issues = "https://github.com/vulonviing/paperhub/issues"
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/paperhub"]
@@ -66,9 +69,11 @@ packages = ["src/paperhub"]
 [tool.hatch.build.targets.sdist]
 include = [
     "src/paperhub",
-    "tests",
-    "docs",
-    "examples",
+    "docs/API_KEYS.md",
+    "docs/ARCHITECTURE.md",
+    "docs/HOW_TO_START.md",
+    "examples/README.md",
+    "examples/03_jupyter_quickstart.ipynb",
     ".env.example",
     "LICENSE",
     "README.md",
@@ -78,6 +83,15 @@ exclude = [
     ".claude",
     "starter-template",
     "docs/PUBLISHING.md",
+    "tests",
+    "examples/03_jupyter_quickstart_tr.ipynb",
+    "dist",
+    "build",
+    "*.egg-info",
+    ".pytest_cache",
+    ".mypy_cache",
+    ".ruff_cache",
+    "**/.DS_Store",
     "**/__pycache__",
     "**/*.pyc",
 ]

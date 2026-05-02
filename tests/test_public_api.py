@@ -57,13 +57,14 @@ def test_paperhub_uses_provider_default_model_when_model_omitted(tmp_path) -> No
 
     settings = Settings(
         OPENAI_API_KEY="openai-key",
-        PAPERHUB_MODEL="claude-3-5-haiku-20241022",
+        PAPERHUB_MODEL="claude-haiku-4-5-20251001",
     )
 
     hub = PaperHub(provider="openai", settings=settings, cache_dir=tmp_path / "cache")
 
     assert hub.provider == "openai"
-    assert hub.model == "gpt-4o-mini"
+    assert hub.model == "gpt-5.4-mini"
+    assert cast(Any, hub.llm).reasoning_effort == "xhigh"
     assert cast(Any, hub.llm)._api_key == "openai-key"
 
 
@@ -76,7 +77,8 @@ def test_paperhub_defaults_to_openai(tmp_path) -> None:
     hub = PaperHub(settings=settings, cache_dir=tmp_path / "cache")
 
     assert hub.provider == "openai"
-    assert hub.model == "gpt-4o-mini"
+    assert hub.model == "gpt-5.4-mini"
+    assert cast(Any, hub.llm).reasoning_effort == "xhigh"
     assert cast(Any, hub.llm)._api_key == "openai-key"
 
 
@@ -92,6 +94,20 @@ def test_paperhub_uses_provider_specific_env_model(tmp_path) -> None:
     hub = PaperHub(provider="openai", settings=settings, cache_dir=tmp_path / "cache")
 
     assert hub.model == "gpt-provider-default"
+
+
+def test_openai_reasoning_effort_can_be_disabled(tmp_path) -> None:
+    from paperhub import PaperHub
+    from paperhub.config import Settings
+
+    settings = Settings(
+        OPENAI_API_KEY="openai-key",
+        PAPERHUB_OPENAI_REASONING_EFFORT="",
+    )
+
+    hub = PaperHub(provider="openai", settings=settings, cache_dir=tmp_path / "cache")
+
+    assert cast(Any, hub.llm).reasoning_effort is None
 
 
 def test_paperhub_explicit_model_wins_over_provider_default(tmp_path) -> None:
@@ -118,10 +134,11 @@ def test_build_llm_uses_provider_default_when_model_omitted() -> None:
     from paperhub.agents.base import default_model_for_provider
 
     assert build_llm().provider == "openai"
-    assert build_llm().model == "gpt-4o-mini"
-    assert build_llm(provider="openai").model == "gpt-4o-mini"
-    assert default_model_for_provider("anthropic") == "claude-3-5-haiku-20241022"
-    assert default_model_for_provider("google") == "gemini-2.5-pro"
+    assert build_llm().model == "gpt-5.4-mini"
+    assert cast(Any, build_llm()).reasoning_effort == "xhigh"
+    assert build_llm(provider="openai").model == "gpt-5.4-mini"
+    assert default_model_for_provider("anthropic") == "claude-haiku-4-5-20251001"
+    assert default_model_for_provider("google") == "gemini-3-flash-preview"
 
 
 @pytest.mark.asyncio

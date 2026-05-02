@@ -35,7 +35,7 @@ __all__ = [
     "render_plain",
 ]
 
-__version__ = "0.1.0"
+__version__ = "0.1.1"
 
 
 class PaperHub:
@@ -57,6 +57,7 @@ class PaperHub:
         llm: LLMClient | None = None,
         settings: Settings | None = None,
         language: str | None = None,
+        openai_reasoning_effort: str | None = None,
     ):
         self.settings = settings or load_settings()
         self.provider = provider or self.settings.paperhub_provider
@@ -64,6 +65,11 @@ class PaperHub:
         self.concurrency = concurrency or self.settings.paperhub_concurrency
         self.max_pdf_chars = max_pdf_chars or self.settings.paperhub_max_pdf_chars
         self.language: OutputLanguage = normalize_language(language)
+        self.openai_reasoning_effort = (
+            openai_reasoning_effort
+            if openai_reasoning_effort is not None
+            else self.settings.openai_reasoning_effort()
+        )
         cache_root = Path(cache_dir) if cache_dir else self.settings.cache_dir()
         self.cache = Cache(cache_root)
         provider_api_key = api_key if api_key is not None else self._settings_api_key(self.provider)
@@ -71,6 +77,7 @@ class PaperHub:
             model=self.model,
             provider=self.provider,
             api_key=provider_api_key,
+            openai_reasoning_effort=self.openai_reasoning_effort,
         )
 
     def run(

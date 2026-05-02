@@ -15,6 +15,7 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 
 from .agents.base import (
     DEFAULT_MODELS,
+    DEFAULT_OPENAI_REASONING_EFFORT,
     DEFAULT_PROVIDER,
     default_model_for_provider,
     infer_provider_from_model,
@@ -45,6 +46,10 @@ class Settings(BaseSettings):
     paperhub_openai_model: str = Field(
         default=DEFAULT_MODELS["openai"],
         alias="PAPERHUB_OPENAI_MODEL",
+    )
+    paperhub_openai_reasoning_effort: str | None = Field(
+        default=DEFAULT_OPENAI_REASONING_EFFORT,
+        alias="PAPERHUB_OPENAI_REASONING_EFFORT",
     )
     paperhub_google_model: str = Field(
         default=DEFAULT_MODELS["google"],
@@ -84,6 +89,14 @@ class Settings(BaseSettings):
             "google": self.paperhub_google_model,
         }.get(chosen)
         return provider_specific or default_model_for_provider(chosen)
+
+    def openai_reasoning_effort(self) -> str | None:
+        """Return the configured OpenAI reasoning effort, or None when disabled."""
+
+        if self.paperhub_openai_reasoning_effort is None:
+            return None
+        value = self.paperhub_openai_reasoning_effort.strip()
+        return value or None
 
 
 def load_settings() -> Settings:

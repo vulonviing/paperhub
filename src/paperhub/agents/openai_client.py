@@ -6,6 +6,8 @@ import os
 from collections.abc import Iterable
 from typing import Any
 
+from .base import DEFAULT_MODELS, DEFAULT_OPENAI_REASONING_EFFORT
+
 
 class OpenAIAuthError(RuntimeError):
     """Raised when no OpenAI API key is configured at call time."""
@@ -14,9 +16,16 @@ class OpenAIAuthError(RuntimeError):
 class OpenAIClient:
     provider = "openai"
 
-    def __init__(self, *, model: str = "gpt-4o-mini", api_key: str | None = None):
+    def __init__(
+        self,
+        *,
+        model: str = DEFAULT_MODELS["openai"],
+        api_key: str | None = None,
+        reasoning_effort: str | None = DEFAULT_OPENAI_REASONING_EFFORT,
+    ):
         self.model = model
         self._api_key = api_key or os.environ.get("OPENAI_API_KEY")
+        self.reasoning_effort = (reasoning_effort or "").strip() or None
         self._client: Any = None
 
     def _ensure_client(self) -> None:
@@ -45,13 +54,17 @@ class OpenAIClient:
         msg_list: list[dict[str, str]] = [{"role": "system", "content": system}]
         for m in messages:
             msg_list.append({"role": m.get("role", "user"), "content": m.get("content", "")})
-        response = await self._client.chat.completions.create(
-            model=self.model,
-            messages=msg_list,
-            temperature=temperature,
-            max_tokens=max_tokens,
-            response_format={"type": "json_object"},
-        )
+        request: dict[str, Any] = {
+            "model": self.model,
+            "messages": msg_list,
+            "temperature": temperature,
+            "max_completion_tokens": max_tokens,
+            "response_format": {"type": "json_object"},
+        }
+        if self.reasoning_effort:
+            request["reasoning_effort"] = self.reasoning_effort
+
+        response = await self._client.chat.completions.create(**request)
         choices = getattr(response, "choices", []) or []
         if not choices:
             return ""

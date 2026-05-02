@@ -55,7 +55,7 @@ Inside the launcher:
 /provider
 /provider openai
 /model
-/model gpt-4o-mini
+/model gpt-5.4-mini
 /model default
 /language
 /date 2026-05

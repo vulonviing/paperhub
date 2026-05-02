@@ -108,6 +108,8 @@ uses the selected provider's default model (`PAPERHUB_ANTHROPIC_MODEL`,
 `PAPERHUB_OPENAI_MODEL`, or `PAPERHUB_GOOGLE_MODEL`). `PAPERHUB_MODEL` is a
 global override, but when it clearly belongs to a different provider it is
 ignored so that a Claude model id is not sent to OpenAI or Google.
+OpenAI also reads `PAPERHUB_OPENAI_REASONING_EFFORT`, defaulting to `xhigh`
+for GPT-5.4 mini unless the value is set empty.
 
 ## Why these tradeoffs
 

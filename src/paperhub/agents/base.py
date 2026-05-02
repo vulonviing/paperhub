@@ -11,10 +11,11 @@ from collections.abc import Iterable
 from typing import Protocol, runtime_checkable
 
 DEFAULT_MODELS = {
-    "anthropic": "claude-3-5-haiku-20241022",
-    "openai": "gpt-4o-mini",
-    "google": "gemini-2.5-pro",
+    "anthropic": "claude-haiku-4-5-20251001",
+    "openai": "gpt-5.4-mini",
+    "google": "gemini-3-flash-preview",
 }
+DEFAULT_OPENAI_REASONING_EFFORT = "xhigh"
 DEFAULT_PROVIDER = "openai"
 
 
@@ -70,6 +71,7 @@ def build_llm(
     provider: str | None = None,
     *,
     api_key: str | None = None,
+    openai_reasoning_effort: str | None = DEFAULT_OPENAI_REASONING_EFFORT,
 ) -> LLMClient:
     """Construct the LLM client for the given model/provider.
 
@@ -86,7 +88,11 @@ def build_llm(
     if chosen == "openai":
         from .openai_client import OpenAIClient
 
-        return OpenAIClient(model=resolved_model, api_key=api_key)
+        return OpenAIClient(
+            model=resolved_model,
+            api_key=api_key,
+            reasoning_effort=openai_reasoning_effort,
+        )
     if chosen == "google":
         from .google_client import GoogleClient
 

@@ -72,6 +72,11 @@ LOGO = r"""
 | |_) / _ \ | |_) |  _| | |_) | |_| | | | |  _ \
 |  __/ ___ \|  __/| |___|  _ <|  _  | |_| | |_) |
 |_| /_/   \_\_|   |_____|_| \_\_| |_|\___/|____/
+                     ____ _     ___
+                    / ___| |   |_ _|
+                   | |   | |    | |
+                   | |___| |___ | |
+                    \____|_____|___|
 """
 
 
@@ -113,7 +118,7 @@ def build_request(state: LauncherState) -> RunRequest:
         start=state.start,
         end=state.end,
         top_n=state.top_n,
-        language=state.language,
+        language=normalize_language(state.language),
     )
 
 
@@ -186,26 +191,40 @@ def render_home(console: Console, state: LauncherState, notice: str | None = Non
 
 
 def command_table() -> Table:
-    table = Table(box=box.SIMPLE, show_header=True, header_style="bold")
-    table.add_column("Command")
-    table.add_column("What it does")
+    table = Table(
+        box=box.SIMPLE_HEAD,
+        show_header=True,
+        header_style="bold white",
+        show_edge=False,
+        pad_edge=False,
+        padding=(0, 2),
+    )
+    table.add_column("Command", style="bold cyan", no_wrap=True, min_width=16)
+    table.add_column("Input", style="dim", no_wrap=True, min_width=32)
+    table.add_column("What it does", style="")
+
+    # (command, example_input, description)
     rows = [
-        ("/status", "Show current run details: provider, model, API key, date range, top_n."),
-        ("/provider", "Open the provider picker; also accepts /provider openai."),
-        ("/model", "Open the model picker; also accepts /model gpt-4o-mini."),
-        ("/model default", "Reset to the selected provider's configured default model."),
-        ("/language", "Choose output language (en / tr)."),
-        ("/date 2026-05", "Set date (month). Formats: YYYY-MM, YYYY, YYYY-MM-DD, YYYY-WXX,"),
-        ("", "  or 'YYYY-MM-DD YYYY-MM-DD' for a custom range."),
-        ("/top 5", "Override the requested number of papers."),
-        ("/metadata", "Fetch paper metadata only; no LLM call."),
-        ("/run", "Run the full PaperHub summarization pipeline."),
-        ("/guide", "Print docs/HOW_TO_START.md in the terminal."),
-        ("/api-keys", "Print docs/API_KEYS.md in the terminal."),
-        ("/quit", "Exit the launcher."),
+        ("/status",   "",                              "Show provider, model, API key status, date range and top-n."),
+        ("/provider", "/provider openai",              "Switch provider. Opens picker when called with no argument."),
+        ("/model",    "/model gpt-5.4-mini",           "Switch model. Use 'default' to reset, 'custom' to free-type."),
+        ("/language", "/language tr",                  "Set output language. Options: en, tr."),
+        ("/date",     "/date 2026-05",                 "Set period — month. Format: YYYY-MM"),
+        ("",          "/date 2026",                    "Set period — full year. Format: YYYY"),
+        ("",          "/date 2026-05-15",              "Set period — single day. Format: YYYY-MM-DD"),
+        ("",          "/date 2026-W18",                "Set period — ISO week. Format: YYYY-WNN"),
+        ("",          "/date 2026-05-01 2026-05-31",   "Set period — custom range. Two ISO dates separated by space."),
+        ("/top",      "/top 10",                       "Override number of papers to fetch and summarize."),
+        ("/metadata", "",                              "Fetch paper list from HuggingFace without calling the LLM."),
+        ("/run",      "",                              "Run the full pipeline: fetch → download PDFs → summarize."),
+        ("/guide",    "",                              "Print the getting-started guide (docs/HOW_TO_START.md)."),
+        ("/api-keys", "",                              "Print API key setup instructions (docs/API_KEYS.md)."),
+        ("/quit",     "",                              "Exit the launcher."),
     ]
-    for command, purpose in rows:
-        table.add_row(command, purpose)
+
+    for cmd, example, desc in rows:
+        table.add_row(cmd, example, desc)
+
     return table
 
 
