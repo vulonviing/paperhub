@@ -7,9 +7,12 @@ a remote service.
 
 from __future__ import annotations
 
+import os
+import re
+from contextlib import suppress
 from pathlib import Path
 
-from platformdirs import user_cache_path
+from platformdirs import user_cache_path, user_config_path
 from pydantic import Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
@@ -21,12 +24,91 @@ from .agents.base import (
     infer_provider_from_model,
 )
 
+APP_NAME = "paperhub"
+APP_AUTHOR = "paperhub"
+USER_CONFIG_FILENAME = ".env"
+
+
+def user_config_dir(*, create: bool = False) -> Path:
+    """Return PaperHub's per-user config directory."""
+
+    path = user_config_path(APP_NAME, appauthor=APP_AUTHOR)
+    if create:
+        path.mkdir(parents=True, exist_ok=True)
+    return path
+
+
+def user_config_env_path(*, create_parent: bool = False) -> Path:
+    """Return the PaperHub-specific dotenv file path."""
+
+    return user_config_dir(create=create_parent) / USER_CONFIG_FILENAME
+
+
+def read_user_config_values(path: Path | None = None) -> dict[str, str]:
+    """Read PaperHub's user config dotenv file."""
+
+    config_path = path or user_config_env_path()
+    if not config_path.exists():
+        return {}
+
+    values: dict[str, str] = {}
+    for raw_line in config_path.read_text(encoding="utf-8").splitlines():
+        line = raw_line.strip()
+        if not line or line.startswith("#") or "=" not in line:
+            continue
+        key, value = line.split("=", 1)
+        key = key.strip()
+        if not re.fullmatch(r"[A-Za-z_][A-Za-z0-9_]*", key):
+            continue
+        values[key] = _unquote_dotenv_value(value.strip())
+    return values
+
+
+def save_user_config_value(key: str, value: str, path: Path | None = None) -> Path:
+    """Write one value into PaperHub's user config dotenv file."""
+
+    if not re.fullmatch(r"[A-Z][A-Z0-9_]*", key):
+        raise ValueError(f"invalid config key: {key}")
+    if "\n" in value or "\r" in value:
+        raise ValueError("config values must be single-line strings")
+
+    config_path = path or user_config_env_path(create_parent=True)
+    values = read_user_config_values(config_path)
+    values[key] = value.strip()
+
+    lines = [
+        "# PaperHub user config. Do not commit this file.",
+        "# Managed by `paperhub set-key` and the interactive `/set-key` command.",
+        "",
+    ]
+    for existing_key in sorted(values):
+        lines.append(f"{existing_key}={_quote_dotenv_value(values[existing_key])}")
+    config_path.write_text("\n".join(lines) + "\n", encoding="utf-8")
+    with suppress(OSError):
+        os.chmod(config_path, 0o600)
+    return config_path
+
+
+def _quote_dotenv_value(value: str) -> str:
+    if re.fullmatch(r"[A-Za-z0-9_./:=@+\-]*", value):
+        return value
+    escaped = value.replace("\\", "\\\\").replace('"', '\\"')
+    return f'"{escaped}"'
+
+
+def _unquote_dotenv_value(value: str) -> str:
+    if len(value) >= 2 and value[0] == value[-1] == '"':
+        return value[1:-1].replace('\\"', '"').replace("\\\\", "\\")
+    if len(value) >= 2 and value[0] == value[-1] == "'":
+        return value[1:-1]
+    return value
+
 
 class Settings(BaseSettings):
     """Environment-backed configuration."""
 
     model_config = SettingsConfigDict(
-        env_file=".env",
+        env_file=str(user_config_env_path()),
         env_file_encoding="utf-8",
         env_prefix="",
         extra="ignore",
@@ -65,7 +147,7 @@ class Settings(BaseSettings):
         if self.paperhub_cache_dir:
             path = Path(self.paperhub_cache_dir).expanduser()
         else:
-            path = user_cache_path("paperhub", appauthor="paperhub")
+            path = user_cache_path(APP_NAME, appauthor=APP_AUTHOR)
         path.mkdir(parents=True, exist_ok=True)
         return path
 

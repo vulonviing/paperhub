@@ -12,6 +12,7 @@ from typing import Any, cast, get_args
 import httpx
 
 from .agents.base import DEFAULT_PROVIDER, LLMClient, build_llm
+from .agents.health import LLMHealthCheck, check_llm
 from .cache import Cache
 from .config import Settings, load_settings
 from .dates import resolve_range
@@ -25,17 +26,19 @@ __all__ = [
     "PaperHub",
     "PaperMeta",
     "PaperSummary",
+    "LLMHealthCheck",
     "RunRequest",
     "Settings",
     "OutputLanguage",
     "build_llm",
+    "check_llm",
     "load_settings",
     "normalize_language",
     "render_markdown",
     "render_plain",
 ]
 
-__version__ = "0.1.1"
+__version__ = "0.1.3"
 
 
 class PaperHub:

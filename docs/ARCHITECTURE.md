@@ -44,7 +44,8 @@ the user-facing workflow in `README.md`.
 - **LLM access** is gated by an `LLMClient` protocol. `PaperAgent` knows
   nothing about Anthropic/OpenAI/Google internals. Provider SDKs are imported
   lazily inside their respective client classes.
-- **Cache** is a single SQLite database under `~/.cache/paperhub/`. Three
+- **Cache** is a single SQLite database under the OS-specific user cache
+  directory. Three
   tables: `paper_meta`, `pdf_text`, and `summary(arxiv_id, model)`. Summary
   cache keys include the model identifier so swapping models does not return
   stale results.
@@ -98,10 +99,14 @@ default. This is also a polite concurrency level for the arXiv PDF mirror.
 
 ## Configuration
 
-`config.Settings` reads from environment variables (and `.env` if present)
-without raising on missing keys. Provider clients only complain about keys
-when `complete()` is actually called. This is what lets the test suite run
-without any provider credentials.
+`config.Settings` reads from environment variables and PaperHub's app-specific
+user config dotenv file. The CLI writes that file with `paperhub set-key` or
+interactive `/set-key`, instead of modifying the current directory's generic
+`.env`. After saving a key, the CLI runs a tiny live provider health check via
+`agents.health.check_llm` so bad keys, wrong model ids, missing optional SDKs,
+and empty provider responses show up immediately. Provider clients still only
+require keys when a remote call is made, which lets imports and the unit test
+suite run without provider credentials.
 
 Model resolution is provider-aware. If the caller omits `model`, `PaperHub`
 uses the selected provider's default model (`PAPERHUB_ANTHROPIC_MODEL`,
@@ -109,7 +114,9 @@ uses the selected provider's default model (`PAPERHUB_ANTHROPIC_MODEL`,
 global override, but when it clearly belongs to a different provider it is
 ignored so that a Claude model id is not sent to OpenAI or Google.
 OpenAI also reads `PAPERHUB_OPENAI_REASONING_EFFORT`, defaulting to `xhigh`
-for GPT-5.4 mini unless the value is set empty.
+for GPT-5.4 mini unless the value is set empty. OpenAI reasoning models use a
+larger minimum completion budget because hidden reasoning tokens and visible
+JSON output share the same completion limit.
 
 ## Why these tradeoffs
 

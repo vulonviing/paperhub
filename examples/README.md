@@ -15,6 +15,7 @@ Inside the launcher, type `/help` to see the command list. Common commands:
 ```text
 /provider
 /provider openai
+/version
 /model
 /model gpt-5.4-mini
 /language
@@ -25,6 +26,9 @@ Inside the launcher, type `/help` to see the command list. Common commands:
 /top 5
 /metadata
 /run
+/set-key openai
+/keys
+/config-path
 /api-keys
 /quit
 ```
@@ -40,7 +44,8 @@ Inside the launcher, type `/help` to see the command list. Common commands:
 | `/date 2026-05-01 2026-05-31`    | custom  | Inclusive range      |
 
 The launcher shows the current run details — provider, model, API key status,
-date range, top_n — in a dashboard. Use `/provider` and `/model` to switch
+date range, top_n — in a dashboard. Use `/set-key` to save provider keys in
+PaperHub's user config file, and use `/provider` and `/model` to switch
 between providers and models. `/metadata` is safe for setup checks because it
 does not call an LLM. `/run` uses the selected provider and requires that
 provider's API key.

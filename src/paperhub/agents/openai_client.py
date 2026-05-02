@@ -8,6 +8,8 @@ from typing import Any
 
 from .base import DEFAULT_MODELS, DEFAULT_OPENAI_REASONING_EFFORT
 
+OPENAI_REASONING_MIN_COMPLETION_TOKENS = 25000
+
 
 class OpenAIAuthError(RuntimeError):
     """Raised when no OpenAI API key is configured at call time."""
@@ -57,16 +59,46 @@ class OpenAIClient:
         request: dict[str, Any] = {
             "model": self.model,
             "messages": msg_list,
-            "temperature": temperature,
-            "max_completion_tokens": max_tokens,
+            "max_completion_tokens": _completion_token_budget(self.model, max_tokens),
             "response_format": {"type": "json_object"},
         }
-        if self.reasoning_effort:
+        if _supports_reasoning_effort(self.model) and self.reasoning_effort:
             request["reasoning_effort"] = self.reasoning_effort
+        if _supports_custom_temperature(self.model):
+            request["temperature"] = temperature
 
         response = await self._client.chat.completions.create(**request)
         choices = getattr(response, "choices", []) or []
         if not choices:
             return ""
-        message = getattr(choices[0], "message", None)
-        return (getattr(message, "content", "") or "").strip()
+        choice = choices[0]
+        message = getattr(choice, "message", None)
+        content = (getattr(message, "content", "") or "").strip()
+        finish_reason = getattr(choice, "finish_reason", None)
+        if finish_reason == "length":
+            raise RuntimeError(
+                f"OpenAI returned empty content (finish_reason={finish_reason}). "
+                "Try a lower reasoning effort or a model with a larger completion budget."
+            )
+        return content
+
+
+def _supports_reasoning_effort(model: str) -> bool:
+    """Return whether a Chat Completions model supports reasoning_effort."""
+
+    lowered = model.lower()
+    return lowered.startswith(("gpt-5", "o1", "o3", "o4"))
+
+
+def _supports_custom_temperature(model: str) -> bool:
+    """Return whether PaperHub should send a custom temperature value."""
+
+    return not _supports_reasoning_effort(model)
+
+
+def _completion_token_budget(model: str, requested: int) -> int:
+    """Give reasoning models enough budget for hidden reasoning plus JSON output."""
+
+    if _supports_reasoning_effort(model):
+        return max(requested, OPENAI_REASONING_MIN_COMPLETION_TOKENS)
+    return requested

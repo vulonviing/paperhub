@@ -64,7 +64,7 @@ def test_paperhub_uses_provider_default_model_when_model_omitted(tmp_path) -> No
 
     assert hub.provider == "openai"
     assert hub.model == "gpt-5.4-mini"
-    assert cast(Any, hub.llm).reasoning_effort == "xhigh"
+    assert cast(Any, hub.llm).reasoning_effort == "medium"
     assert cast(Any, hub.llm)._api_key == "openai-key"
 
 
@@ -78,7 +78,7 @@ def test_paperhub_defaults_to_openai(tmp_path) -> None:
 
     assert hub.provider == "openai"
     assert hub.model == "gpt-5.4-mini"
-    assert cast(Any, hub.llm).reasoning_effort == "xhigh"
+    assert cast(Any, hub.llm).reasoning_effort == "medium"
     assert cast(Any, hub.llm)._api_key == "openai-key"
 
 
@@ -110,6 +110,20 @@ def test_openai_reasoning_effort_can_be_disabled(tmp_path) -> None:
     assert cast(Any, hub.llm).reasoning_effort is None
 
 
+def test_user_config_value_round_trip(tmp_path) -> None:
+    from paperhub.config import read_user_config_values, save_user_config_value
+
+    path = tmp_path / ".env"
+
+    save_user_config_value("OPENAI_API_KEY", "sk-test", path)
+    save_user_config_value("PAPERHUB_PROVIDER", "openai", path)
+
+    assert read_user_config_values(path) == {
+        "OPENAI_API_KEY": "sk-test",
+        "PAPERHUB_PROVIDER": "openai",
+    }
+
+
 def test_paperhub_explicit_model_wins_over_provider_default(tmp_path) -> None:
     from paperhub import PaperHub
     from paperhub.config import Settings
@@ -135,9 +149,9 @@ def test_build_llm_uses_provider_default_when_model_omitted() -> None:
 
     assert build_llm().provider == "openai"
     assert build_llm().model == "gpt-5.4-mini"
-    assert cast(Any, build_llm()).reasoning_effort == "xhigh"
+    assert cast(Any, build_llm()).reasoning_effort == "medium"
     assert build_llm(provider="openai").model == "gpt-5.4-mini"
-    assert default_model_for_provider("anthropic") == "claude-haiku-4-5-20251001"
+    assert default_model_for_provider("anthropic") == "claude-sonnet-4-6"
     assert default_model_for_provider("google") == "gemini-3-flash-preview"
 
 

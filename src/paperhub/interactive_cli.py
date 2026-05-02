@@ -33,6 +33,8 @@ from .agents.base import (
     default_model_for_provider,
     infer_provider_from_model,
 )
+from .agents.health import LLMHealthCheck, check_llm
+from .config import save_user_config_value, user_config_env_path
 from .dates import pretty_period, resolve_range
 from .fetchers import HFAPIFetcher, HFHtmlFetcher, papers_in_range
 from .formatter import LABELS
@@ -78,6 +80,73 @@ LOGO = r"""
                    | |___| |___ | |
                     \____|_____|___|
 """
+
+DOC_FALLBACKS = {
+    "docs/API_KEYS.md": """
+# PaperHub API Keys
+
+Save provider keys with:
+
+```bash
+paperhub version
+paperhub set-key openai
+paperhub set-key anthropic
+paperhub set-key google
+paperhub keys
+paperhub check-llm
+paperhub api-keys
+paperhub config-path
+```
+
+Inside the interactive launcher:
+
+```text
+/set-key openai
+/check-llm
+/api-keys
+```
+
+PaperHub stores keys in its own per-user config file instead of the current
+project's `.env`. Shell environment variables such as `OPENAI_API_KEY`,
+`ANTHROPIC_API_KEY`, and `GOOGLE_API_KEY` still work and take priority.
+""",
+    "docs/HOW_TO_START.md": """
+# PaperHub How To Start
+
+```bash
+paperhub version
+paperhub set-key openai
+paperhub
+```
+
+Common launcher commands:
+
+```text
+/provider
+/version
+/model
+/date 2026-05
+/top 5
+/metadata
+/run
+/set-key openai
+/keys
+/check-llm
+/config-path
+/api-keys
+/quit
+```
+
+Python/Jupyter usage:
+
+```python
+from paperhub import PaperHub
+
+hub = PaperHub(provider="openai")
+hub.run(period="month", year=2026, month=5, top_n=5)
+```
+""",
+}
 
 
 @dataclass
@@ -186,7 +255,7 @@ def render_home(console: Console, state: LauncherState, notice: str | None = Non
     status_panel(console, state)
     console.print(command_table())
     if notice:
-        console.print(f"[green]{notice}[/green]")
+        console.print(notice)
     console.print("[dim]Type '/help' for commands. Type '/quit' to exit.[/dim]")
 
 
@@ -206,6 +275,7 @@ def command_table() -> Table:
     # (command, example_input, description)
     rows = [
         ("/status",   "",                              "Show provider, model, API key status, date range and top-n."),
+        ("/version",  "",                              "Show the installed PaperHub CLI version."),
         ("/provider", "/provider openai",              "Switch provider. Opens picker when called with no argument."),
         ("/model",    "/model gpt-5.4-mini",           "Switch model. Use 'default' to reset, 'custom' to free-type."),
         ("/language", "/language tr",                  "Set output language. Options: en, tr."),
@@ -217,9 +287,16 @@ def command_table() -> Table:
         ("/top",      "/top 10",                       "Override number of papers to fetch and summarize."),
         ("/metadata", "",                              "Fetch paper list from HuggingFace without calling the LLM."),
         ("/run",      "",                              "Run the full pipeline: fetch → download PDFs → summarize."),
+        ("/set-key",  "/set-key openai",               "Save a provider API key to PaperHub's user config file."),
+        ("/keys",     "",                              "Show provider key status."),
+        ("/check-llm", "/check-llm openai",            "Send a tiny live request to verify the selected provider/model."),
+        ("/config-path", "",                           "Print PaperHub's user config path."),
         ("/guide",    "",                              "Print the getting-started guide (docs/HOW_TO_START.md)."),
-        ("/api-keys", "",                              "Print API key setup instructions (docs/API_KEYS.md)."),
-        ("/quit",     "",                              "Exit the launcher."),
+        ("/api-keys",     "",                              "Show API key status and setup instructions."),
+        ("/clear-cache",  "",                              "Delete all cached summaries and PDFs."),
+        ("",              "/clear-cache summaries",        "Delete only LLM summaries (keep PDFs)."),
+        ("",              "/clear-cache pdfs",             "Delete only downloaded PDF files."),
+        ("/quit",         "",                              "Exit the launcher."),
     ]
 
     for cmd, example, desc in rows:
@@ -243,9 +320,111 @@ def model_table() -> Table:
 def print_doc(console: Console, relative_path: str) -> None:
     path = REPO_ROOT / relative_path
     if not path.exists():
+        fallback = DOC_FALLBACKS.get(relative_path)
+        if fallback:
+            console.print(Markdown(fallback))
+            return
         console.print(f"[red]Missing documentation file:[/red] {path}")
         return
     console.print(Markdown(path.read_text(encoding="utf-8")))
+
+
+def print_api_key_status(console: Console, state: LauncherState) -> None:
+    settings = load_settings()
+    console.print(Panel(provider_table(settings, state), border_style="magenta", title="API Keys"))
+    console.print(f"[dim]PaperHub user config:[/dim] {user_config_env_path()}")
+
+
+def save_api_key(console: Console, state: LauncherState, args: list[str]) -> str | None:
+    if args:
+        provider = args[0].lower()
+    else:
+        provider = Prompt.ask(
+            "Choose provider",
+            choices=list(PROVIDERS),
+            default=state.provider,
+        )
+    if provider not in PROVIDERS:
+        console.print("[red]Use:[/red] /set-key openai|anthropic|google")
+        return None
+
+    env_name = KEY_ENV_BY_PROVIDER[provider]
+    if len(args) >= 2:
+        api_key = args[1].strip()
+    else:
+        api_key = Prompt.ask(f"{env_name}", password=True).strip()
+    if not api_key:
+        console.print("[red]API key cannot be empty.[/red]")
+        return None
+
+    path = save_user_config_value(env_name, api_key)
+    if state.provider != provider:
+        state.model = None
+    state.provider = provider
+    shell_api_key = os.environ.get(env_name)
+    effective_api_key = shell_api_key or api_key
+    override_notice = ""
+    if shell_api_key and shell_api_key != api_key:
+        override_notice = (
+            f"\n[yellow]{env_name} is also set in your shell, so it overrides "
+            "the saved PaperHub config value for this session.[/yellow]"
+        )
+
+    health = run_llm_health_check(console, state, provider, api_key=effective_api_key)
+    return (
+        f"[green]Saved {env_name} to {path}.[/green]"
+        f"{override_notice}\n{format_health_check(health)}"
+    )
+
+
+def run_llm_health_check(
+    console: Console,
+    state: LauncherState,
+    provider: str | None = None,
+    *,
+    api_key: str | None = None,
+) -> LLMHealthCheck:
+    provider = (provider or state.provider).lower()
+    settings = load_settings()
+    model = state.model if provider == state.provider else None
+    resolved_model = model or settings.model_for_provider(provider)
+    console.print(f"[cyan]Checking {provider} / {resolved_model}...[/cyan]")
+    return _run_async(
+        check_llm(
+            provider,
+            model=resolved_model,
+            api_key=api_key or provider_key(settings, provider),
+            openai_reasoning_effort=settings.openai_reasoning_effort(),
+        )
+    )
+
+
+def format_health_check(result: LLMHealthCheck) -> str:
+    prefix = f"{result.provider} / {result.model}"
+    if result.ok:
+        return f"[green]LLM check passed:[/green] {prefix}"
+    return f"[red]LLM check failed:[/red] {prefix} - {result.message}"
+
+
+def check_llm_command(console: Console, state: LauncherState, args: list[str]) -> bool:
+    provider = (args[0].lower() if args else state.provider)
+    if provider not in PROVIDERS:
+        console.print("[red]Use:[/red] /check-llm openai|anthropic|google")
+        return False
+
+    settings = load_settings()
+    api_key = provider_key(settings, provider)
+    if not api_key:
+        env_name = KEY_ENV_BY_PROVIDER[provider]
+        console.print(
+            f"[red]Missing {env_name}.[/red] Run `paperhub set-key {provider}` "
+            f"or `/set-key {provider}` first."
+        )
+        return False
+
+    result = run_llm_health_check(console, state, provider, api_key=api_key)
+    console.print(format_health_check(result))
+    return result.ok
 
 
 def parse_date_args(args: list[str]) -> tuple[str, int | None, int | None, int | None, int | None, date | None, date | None]:
@@ -528,6 +707,37 @@ def render_rich_summaries(
         console.print()
 
 
+def clear_cache_command(console: Console, args: list[str]) -> None:
+    settings = load_settings()
+    hub = PaperHub(settings=settings)
+    cache = hub.cache
+
+    target = args[0].lower() if args else "all"
+    if target not in {"all", "summaries", "pdfs"}:
+        console.print("[red]Use:[/red] /clear-cache  |  /clear-cache summaries  |  /clear-cache pdfs")
+        return
+
+    stats_before = cache.stats()
+    do_summaries = target in {"all", "summaries"}
+    do_pdfs = target in {"all", "pdfs"}
+    deleted = cache.clear(summaries=do_summaries, pdfs=do_pdfs)
+
+    parts = []
+    if do_summaries:
+        parts.append(f"[green]{deleted['summaries']}[/green] summaries")
+    if do_pdfs:
+        parts.append(f"[green]{deleted['pdf_text']}[/green] PDF text rows")
+        parts.append(f"[green]{deleted['pdf_files']}[/green] PDF files")
+
+    stats_after = cache.stats()
+    console.print(f"[bold]Cache cleared:[/bold] {', '.join(parts)}")
+    console.print(
+        f"[dim]Remaining: {stats_after['summaries']} summaries, "
+        f"{stats_after['pdf_files']} PDF files[/dim]"
+    )
+    _ = stats_before
+
+
 def run_full_pipeline(console: Console, state: LauncherState) -> None:
     settings = load_settings()
     selected_key = provider_key(settings, state.provider)
@@ -535,8 +745,9 @@ def run_full_pipeline(console: Console, state: LauncherState) -> None:
         env_name = KEY_ENV_BY_PROVIDER[state.provider]
         console.print(
             Panel(
-                f"Missing API key for provider '{state.provider}'. Set {env_name} in .env "
-                "or the shell environment before running summaries.",
+                f"Missing API key for provider '{state.provider}'. Save {env_name} with "
+                f"/set-key {state.provider}, run paperhub set-key {state.provider}, "
+                "or set it in the shell environment before running summaries.",
                 border_style="red",
                 title="API Key Required",
             )
@@ -732,6 +943,8 @@ def needs_inline_prompt(line: str) -> bool:
     command = normalize_command(parts[0])
     if command in {"provider", "p", "model", "m", "language", "lang", "l"} and len(parts) == 1:
         return True
+    if command in {"set-key", "apikey", "api-key"} and len(parts) <= 2:
+        return True
     return command in {"model", "m"} and len(parts) == 2 and parts[1].lower() in {"custom", "other"}
 
 
@@ -756,14 +969,29 @@ def dispatch(console: Console, state: LauncherState, line: str) -> bool:
     if command == "status":
         render_home(console, state)
         return True
+    if command in {"version", "v"}:
+        console.print(f"PaperHub v{__version__}")
+        return True
     if command in {"providers", "keys"}:
-        console.print(provider_table(load_settings(), state))
+        print_api_key_status(console, state)
+        return True
+    if command in {"check-llm", "llm-check", "health"}:
+        check_llm_command(console, state, args)
         return True
     if command in {"guide", "how-to-start", "start"}:
         print_doc(console, "docs/HOW_TO_START.md")
         return True
     if command in {"api-keys", "apikeys", "setup-keys"}:
+        print_api_key_status(console, state)
         print_doc(console, "docs/API_KEYS.md")
+        return True
+    if command in {"set-key", "apikey", "api-key"}:
+        notice = save_api_key(console, state, args)
+        if notice:
+            render_home(console, state, notice)
+        return True
+    if command in {"config-path", "config"}:
+        console.print(str(user_config_env_path()))
         return True
     if command == "metadata":
         print_metadata(console, state)
@@ -773,6 +1001,9 @@ def dispatch(console: Console, state: LauncherState, line: str) -> bool:
         return True
     if command == "clear":
         render_home(console, state)
+        return True
+    if command in {"clear-cache", "cache-clear", "clearcache"}:
+        clear_cache_command(console, args)
         return True
     if command == "set" and args:
         notice = handle_set(console, state, normalize_command(args[0]), args[1:])
@@ -824,7 +1055,48 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--language", choices=LANGUAGES, default="en")
     parser.add_argument("--top-n", type=int, default=None)
     parser.add_argument("--concurrency", type=int, default=None)
+    parser.add_argument("command", nargs="?")
+    parser.add_argument("command_args", nargs="*")
     return parser.parse_args()
+
+
+def dispatch_startup_command(
+    console: Console,
+    state: LauncherState,
+    command: str,
+    args: list[str],
+) -> int:
+    normalized = normalize_command(command)
+    if normalized in {"set-key", "apikey", "api-key"}:
+        notice = save_api_key(console, state, args)
+        if notice:
+            console.print(notice)
+            return 0
+        return 2
+    if normalized in {"keys", "providers"}:
+        print_api_key_status(console, state)
+        return 0
+    if normalized in {"check-llm", "llm-check", "health"}:
+        return 0 if check_llm_command(console, state, args) else 1
+    if normalized in {"api-keys", "apikeys", "setup-keys"}:
+        print_api_key_status(console, state)
+        print_doc(console, "docs/API_KEYS.md")
+        return 0
+    if normalized in {"config-path", "config"}:
+        console.print(str(user_config_env_path()))
+        return 0
+    if normalized in {"version", "v", "--version"}:
+        console.print(f"PaperHub v{__version__}")
+        return 0
+    if normalized in {"clear-cache", "cache-clear", "clearcache"}:
+        clear_cache_command(console, args)
+        return 0
+    console.print(f"[red]Unknown command:[/red] {command}")
+    console.print(
+        "[dim]Use `paperhub`, `paperhub version`, `paperhub set-key openai`, "
+        "`paperhub check-llm`, or `paperhub api-keys`.[/dim]"
+    )
+    return 2
 
 
 def main() -> int:
@@ -832,6 +1104,9 @@ def main() -> int:
     args = parse_args()
     console = Console()
     state = initial_state(args)
+
+    if args.command:
+        return dispatch_startup_command(console, state, args.command, args.command_args)
 
     render_home(console, state)
 

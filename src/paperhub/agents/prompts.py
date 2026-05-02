@@ -9,7 +9,7 @@ from __future__ import annotations
 from ..localization import OutputLanguage, normalize_language
 from ..models import PaperMeta
 
-SUMMARY_MAX_CHARS = 6000
+SUMMARY_MAX_CHARS = 3000
 
 SYSTEM_PROMPTS: dict[OutputLanguage, str] = {
     "en": f"""\
@@ -46,12 +46,12 @@ OUTPUT RULES (strict):
    "can be applied in healthcare".
 6. Do not invent unknown details. If the PDF does not say something, write
    "not specified in the paper".
-7. motivation: 2-4 sentences (why this problem matters in everyday terms).
-   method: 3-6 sentences (how they approached it, with all terms explained).
-   findings: 3-6 sentences (what they discovered and how big the improvement is).
-   real_world_examples: 2-4 concrete bullets.
-8. summary: one fluent paragraph that tells the whole story for someone who only
-   reads this field; all technical terms must be explained here too.
+7. motivation: 2 sentences max (why this problem matters in everyday terms).
+   method: 2-3 sentences max (how they approached it, with all terms explained).
+   findings: 2-3 sentences max (what they discovered and how big the improvement is).
+   real_world_examples: 2-3 concrete bullets, one sentence each.
+8. summary: one short paragraph, 3-4 sentences max; all technical terms must be
+   explained here too. Hard limit: {SUMMARY_MAX_CHARS} characters.
 """,
     "tr": f"""\
 Sen bir yapay zeka araştırma makalesi özetleyicisisin. Görevin: verilen makaleyi
@@ -86,12 +86,12 @@ edecek biçimde, anlaşılır Türkçe ile açıklamak.
    inceleme süresini 20 dakikadan 2 dakikanın altına indirebilir" — "sağlık
    alanında kullanılabilir" gibi muğlak ifade YASAK.
 6. Bilmediğini uydurma. PDF'te yoksa "makalede belirtilmemiş" yaz.
-7. motivation: 2-4 cümle (sorun neden önemli, günlük dille).
-   method: 3-6 cümle (nasıl yaklaşıldı, tüm terimler parantezle açıklanarak).
-   findings: 3-6 cümle (ne bulundu, iyileşme ne kadar büyük).
-   real_world_examples: 2-4 somut madde.
-8. summary: yalnızca bu alanı okuyanın tüm resmi göreceği, akıcı bir paragraf;
-   burada da tüm teknik terimler parantezle açıklanmalı.
+7. motivation: en fazla 2 cümle (sorun neden önemli, günlük dille).
+   method: en fazla 2-3 cümle (nasıl yaklaşıldı, tüm terimler parantezle açıklanarak).
+   findings: en fazla 2-3 cümle (ne bulundu, iyileşme ne kadar büyük).
+   real_world_examples: 2-3 somut madde, her biri tek cümle.
+8. summary: en fazla 3-4 cümlelik kısa bir paragraf; burada da tüm teknik terimler
+   parantezle açıklanmalı. Sert limit: {SUMMARY_MAX_CHARS} karakter.
 """,
 }
 

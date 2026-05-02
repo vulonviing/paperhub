@@ -20,22 +20,26 @@ python3 -m pip install -e ".[google]"
 
 ## 2. Add API Keys
 
-Copy the environment template:
+For installed CLI usage, save provider keys into PaperHub's per-user config:
 
 ```bash
-cp .env.example .env
+paperhub version
+paperhub set-key openai
+paperhub check-llm
 ```
 
-Then fill at least one provider key:
+Add optional providers when needed:
 
 ```bash
-OPENAI_API_KEY=...
-ANTHROPIC_API_KEY=...
-GOOGLE_API_KEY=...
+paperhub set-key anthropic
+paperhub set-key google
 ```
 
 PaperHub defaults to `openai`, but you can choose another provider with the
-launcher's `/provider` command.
+launcher's `/provider` command. Environment variables such as
+`OPENAI_API_KEY` still work and take priority over saved user config values.
+After each `set-key`, PaperHub immediately sends one tiny provider request and
+prints whether the selected LLM accepted the key and returned JSON.
 
 ## 3. Start The Interactive Launcher
 
@@ -52,6 +56,7 @@ Inside the launcher:
 
 ```text
 /status
+/version
 /provider
 /provider openai
 /model
@@ -65,6 +70,10 @@ Inside the launcher:
 /top 5
 /metadata
 /run
+/set-key openai
+/keys
+/check-llm
+/config-path
 /api-keys
 /quit
 ```
@@ -79,10 +88,12 @@ Inside the launcher:
 | `/date 2026-W18`                 | week    | ISO week 18 of 2026  |
 | `/date 2026-05-01 2026-05-31`    | custom  | Inclusive range      |
 
-`/provider` opens the provider/API-key availability selector. `/model` opens
-the model selector with three built-in models plus a custom model id option.
-`/metadata` fetches HuggingFace paper metadata only and does not call an LLM.
-`/run` runs the full PDF and LLM summarization pipeline.
+`/provider` opens the provider/API-key availability selector. `/set-key`
+saves a provider key to PaperHub's user config file and verifies it with a
+tiny LLM request. `/check-llm` repeats that live provider check later. `/model`
+opens the model selector with three built-in models plus a custom model id
+option. `/metadata` fetches HuggingFace paper metadata only and does not call
+an LLM. `/run` runs the full PDF and LLM summarization pipeline.
 
 ## 5. Python / Jupyter API
 

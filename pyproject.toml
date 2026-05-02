@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "paperhub"
-version = "0.1.1"
+version = "0.1.4"
 description = "Fetch HuggingFace Daily Papers and produce Jupyter-friendly AI summaries — one paper, one agent."
 readme = "README.md"
 requires-python = ">=3.10"
@@ -116,6 +116,7 @@ ignore = [
 asyncio_mode = "auto"
 testpaths = ["tests"]
 addopts = "-q"
+pythonpath = ["src"]
 filterwarnings = [
     "ignore::DeprecationWarning",
     "ignore::PendingDeprecationWarning",

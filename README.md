@@ -22,14 +22,30 @@ python3 -m pip install -e ".[anthropic]"  # adds the Anthropic client
 python3 -m pip install -e ".[google]"     # adds the Google Gemini client
 ```
 
-## Environment Variables
+## Configuration
 
-PaperHub reads configuration from environment variables (or a `.env` file at
-the project root). Copy `.env.example` to `.env` to start:
+PaperHub reads configuration from shell environment variables and from its own
+per-user config file. The CLI can save provider keys for you without touching a
+project-level `.env` file:
 
 ```bash
-cp .env.example .env
+paperhub version
+paperhub set-key openai
+paperhub set-key anthropic
+paperhub set-key google
+paperhub check-llm
+paperhub api-keys
+paperhub config-path
 ```
+
+Inside the interactive launcher, use `/set-key openai`. The config file lives
+under the OS-specific user config directory, for example
+`~/Library/Application Support/paperhub/.env` on macOS. Environment variables
+still override values saved there.
+
+After `set-key`, PaperHub immediately sends one tiny request to the selected
+provider/model and reports whether the key and LLM are working. You can repeat
+that check later with `paperhub check-llm` or `/check-llm`.
 
 | Variable                           | Purpose                                                       |
 |------------------------------------|---------------------------------------------------------------|
@@ -61,6 +77,7 @@ and run:
 ```text
 /provider
 /provider openai
+/version
 /model
 /model gpt-5.4-mini
 /model default
@@ -72,6 +89,10 @@ and run:
 /top 5
 /metadata
 /run
+/set-key openai
+/keys
+/check-llm
+/config-path
 /api-keys
 /quit
 ```
@@ -87,8 +108,9 @@ and run:
 | `/date 2026-05-01 2026-05-31` | custom   | Inclusive date range  |
 
 `/metadata` fetches HuggingFace paper metadata only and does not call an LLM.
-If the selected provider key is missing, `/run` prints setup guidance and the
-launcher can render `docs/API_KEYS.md` with `/api-keys`.
+If the selected provider key is missing, `/run` prints setup guidance.
+`/api-keys` shows key status and setup help. `/check-llm` sends a tiny live
+provider request and confirms that the selected key/model can respond.
 
 You can also pass startup flags:
 
@@ -139,7 +161,7 @@ PaperHub(model="gemini-3-flash-preview", provider="google")
 ```
 
 If `model` is omitted, PaperHub picks the selected provider's default model.
-Provider-specific `.env` values such as `PAPERHUB_OPENAI_MODEL` override those
+Provider-specific config values such as `PAPERHUB_OPENAI_MODEL` override those
 defaults. `PAPERHUB_MODEL` remains available as a global override. OpenAI uses
 `PAPERHUB_OPENAI_REASONING_EFFORT=xhigh` by default; set it to an empty value
 to let the OpenAI API choose its model default.
@@ -151,7 +173,10 @@ providers.
 ## Caching
 
 PaperHub caches metadata, PDF text, and summaries in
-`~/.cache/paperhub/paperhub.sqlite` (override with `PAPERHUB_CACHE_DIR`).
+the OS-specific user cache directory, for example
+`~/Library/Caches/paperhub/paperhub.sqlite` on macOS and
+`~/.cache/paperhub/paperhub.sqlite` on Linux. Override with
+`PAPERHUB_CACHE_DIR`.
 Summary entries are keyed by `(arxiv_id, model, language)`, so swapping models
 or output language gives you a clean re-run while keeping the PDF download
 free.

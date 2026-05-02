@@ -11,11 +11,11 @@ from collections.abc import Iterable
 from typing import Protocol, runtime_checkable
 
 DEFAULT_MODELS = {
-    "anthropic": "claude-haiku-4-5-20251001",
+    "anthropic": "claude-sonnet-4-6",
     "openai": "gpt-5.4-mini",
     "google": "gemini-3-flash-preview",
 }
-DEFAULT_OPENAI_REASONING_EFFORT = "xhigh"
+DEFAULT_OPENAI_REASONING_EFFORT = "medium"
 DEFAULT_PROVIDER = "openai"
 
 

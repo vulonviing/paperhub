@@ -200,3 +200,26 @@ class Cache:
             return PaperSummary.model_validate_json(row["payload"])
         except Exception:
             return None
+
+    def clear(self, *, summaries: bool = True, pdfs: bool = True) -> dict[str, int]:
+        """Delete cached data. Returns counts of deleted rows/files."""
+        deleted: dict[str, int] = {"summaries": 0, "pdf_text": 0, "pdf_files": 0}
+        with self._connect() as conn:
+            if summaries:
+                deleted["summaries"] = conn.execute("DELETE FROM summary").rowcount
+            if pdfs:
+                deleted["pdf_text"] = conn.execute("DELETE FROM pdf_text").rowcount
+        if pdfs:
+            for pdf_file in self.pdf_dir.glob("*.pdf"):
+                pdf_file.unlink(missing_ok=True)
+                deleted["pdf_files"] += 1
+        return deleted
+
+    def stats(self) -> dict[str, int]:
+        """Return row counts for each cached table."""
+        with self._connect() as conn:
+            return {
+                "summaries": conn.execute("SELECT COUNT(*) FROM summary").fetchone()[0],
+                "pdf_text": conn.execute("SELECT COUNT(*) FROM pdf_text").fetchone()[0],
+                "pdf_files": sum(1 for _ in self.pdf_dir.glob("*.pdf")),
+            }
