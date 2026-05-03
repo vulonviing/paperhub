@@ -1,7 +1,8 @@
 """Language-aware system and user prompt templates.
 
-The 6000-character cap is enforced both here (instructions to the model)
-and post-validation in `paper_agent.py` (`trim_to_sentence_boundary`).
+Cloud prompts ask for a 3000-character summary; Ollama prompts use a shorter
+1000-character target for local generation speed. `PaperSummary` keeps a
+6000-character model-level guard for backward compatibility.
 """
 
 from __future__ import annotations
@@ -126,6 +127,69 @@ Yukarıdaki kurallara göre JSON özet üret. Yalnızca JSON döndür.
 """,
 }
 
+# ---------------------------------------------------------------------------
+# Ollama-specific user templates
+#
+# Small local models (gemma, llama, etc.) tend to collapse all content into the
+# "summary" field and leave the other fields empty when given open-ended
+# instructions. These templates use a "fill-in-each-field" style — explicitly
+# asking a question per field — which small models handle much more reliably
+# because it reads like a structured cloze task rather than free generation.
+# ---------------------------------------------------------------------------
+
+OLLAMA_USER_TEMPLATES: dict[OutputLanguage, str] = {
+    "en": """\
+Paper title: {title}
+Authors: {authors}
+arXiv ID: {arxiv_id}
+Abstract:
+{abstract}
+
+PDF text (may be truncated):
+\"\"\"
+{pdf_text}
+\"\"\"
+
+Read the paper above, then answer each of the following questions to build a JSON object.
+Every field below MUST contain real text from the paper — do not leave any field empty.
+
+Answer these questions for each JSON field:
+- "motivation": Why does this research problem matter in everyday life? Write 2 sentences.
+- "method": How did the researchers approach and solve the problem? Write 2-3 sentences.
+- "findings": What did they discover and how significant is the improvement? Write 2-3 sentences.
+- "real_world_examples": Give 2-3 concrete, specific real-world applications with numbers or metrics.
+- "summary": Write a plain-language 3-4 sentence paragraph summarizing the paper (max {max_chars} characters).
+
+Use plain language throughout. Explain every technical term in parentheses on first use.
+Return ONLY the JSON object — no preamble, no markdown.
+""",
+    "tr": """\
+Makale başlığı: {title}
+Yazarlar: {authors}
+arXiv ID: {arxiv_id}
+Özet:
+{abstract}
+
+PDF metni (kısaltılmış olabilir):
+\"\"\"
+{pdf_text}
+\"\"\"
+
+Yukarıdaki makaleyi oku, ardından aşağıdaki her soruyu yanıtlayarak bir JSON nesnesi oluştur.
+Aşağıdaki her alan makaleden gerçek metin içermelidir — hiçbir alanı boş bırakma.
+
+Her JSON alanı için şu soruları yanıtla:
+- "motivation": Bu araştırma problemi günlük hayatta neden önemlidir? 2 cümle yaz.
+- "method": Araştırmacılar problemi nasıl ele aldı ve çözdü? 2-3 cümle yaz.
+- "findings": Ne keşfettiler ve iyileşme ne kadar büyük? 2-3 cümle yaz.
+- "real_world_examples": Sayı veya ölçüm içeren 2-3 somut, özgün gerçek dünya uygulaması ver.
+- "summary": Makaleyi özetleyen sade dilde 3-4 cümlelik bir paragraf yaz (maks {max_chars} karakter).
+
+Her yerde sade dil kullan. Her teknik terimi ilk kullanımında parantez içinde açıkla.
+YALNIZCA JSON nesnesini döndür — önsöz veya markdown olmadan.
+""",
+}
+
 FALLBACK_TEXT: dict[OutputLanguage, dict[str, str]] = {
     "en": {
         "abstract": "(no abstract found in the paper metadata)",
@@ -161,6 +225,7 @@ def build_messages(
     *,
     max_pdf_chars: int = 60_000,
     language: str | None = None,
+    provider: str | None = None,
 ) -> list[dict[str, str]]:
     """Build the user-message list passed to the LLM client."""
 
@@ -168,13 +233,22 @@ def build_messages(
     fallback = FALLBACK_TEXT[lang]
     abstract = paper.abstract or fallback["abstract"]
     truncated = pdf_text[:max_pdf_chars] if pdf_text else fallback["pdf_text"]
-    user = USER_TEMPLATES[lang].format(
-        title=paper.title,
-        authors=", ".join(paper.authors) if paper.authors else fallback["authors"],
-        arxiv_id=paper.arxiv_id,
-        abstract=abstract,
-        pdf_text=truncated,
-    )
+    fmt_args = {
+        "title": paper.title,
+        "authors": ", ".join(paper.authors) if paper.authors else fallback["authors"],
+        "arxiv_id": paper.arxiv_id,
+        "abstract": abstract,
+        "pdf_text": truncated,
+    }
+    if (provider or "").lower() == "ollama":
+        # Always use English template for Ollama (fewer tokens, clearer instructions).
+        # Append language note when output is not English.
+        user = OLLAMA_USER_TEMPLATES["en"].format(max_chars=OLLAMA_SUMMARY_MAX_CHARS, **fmt_args)
+        note = _OLLAMA_LANG_NOTES.get(lang, "")
+        if note:
+            user = user.rstrip() + f"\n\n{note}\n"
+    else:
+        user = USER_TEMPLATES[lang].format(**fmt_args)
     return [{"role": "user", "content": user}]
 
 
@@ -193,3 +267,80 @@ def repair_instruction(language: str | None = None) -> str:
 SYSTEM_PROMPT = SYSTEM_PROMPTS["en"]
 USER_TEMPLATE = USER_TEMPLATES["en"]
 REPAIR_INSTRUCTION = REPAIR_INSTRUCTIONS["en"]
+
+# ---------------------------------------------------------------------------
+# Ollama-specific prompts
+#
+# Small local models (gemma, llama, etc.) are less reliable at following the
+# elaborate multi-rule prompts above. These prompts are shorter and more direct.
+#
+# LANGUAGE STRATEGY FOR OLLAMA
+# Always use English instructions regardless of the desired output language.
+# Reason: Turkish (and other non-English) text tokenises into ~2× more tokens
+# than English with typical LLM tokenisers, because those tokenisers are
+# primarily trained on English. The effect compounds:
+#   • Turkish system + user prompts  → ~2× more input tokens to process
+#   • Turkish JSON output (summary alone at 3000 chars) → ~1500 output tokens
+#     vs ~750 for English — directly doubling generation time per paper
+# For gemma4:e4b at ~10 tok/s this means 5–9 min per paper in Turkish mode
+# vs 2–3 min in English mode.
+# Solution: use the English prompt always; append a one-line language note
+# ("Write all field values in Turkish") so the output language is still correct
+# but the heavy instruction-following load is done entirely in English.
+# ---------------------------------------------------------------------------
+
+# Reduced summary cap for Ollama — keeps output token count manageable.
+# Cloud providers can handle 3000 chars fine; local models slow down sharply
+# beyond ~1000 chars of non-English output.
+OLLAMA_SUMMARY_MAX_CHARS = 1000
+
+# One-line instruction appended to English prompts when output lang != English.
+_OLLAMA_LANG_NOTES: dict[str, str] = {
+    "tr": (
+        "IMPORTANT: Write all content inside the JSON field values in Turkish (Türkçe). "
+        'Keep the JSON keys exactly as-is: "motivation", "method", "findings", '
+        '"real_world_examples", "summary".'
+    ),
+}
+
+OLLAMA_SYSTEM_PROMPT_EN = f"""\
+You are a JSON generator. Output ONLY a valid JSON object — no text before or after it, no markdown, no explanation.
+
+You MUST include all five keys in your JSON output:
+
+{{
+  "motivation": "<why this research problem matters in everyday terms — 2 sentences max>",
+  "method": "<how the researchers approached the problem — 2-3 sentences max>",
+  "findings": "<what they discovered and how significant the improvement is — 2-3 sentences max>",
+  "real_world_examples": ["<concrete example 1>", "<concrete example 2>"],
+  "summary": "<short paragraph of 3-4 sentences — hard limit: {OLLAMA_SUMMARY_MAX_CHARS} characters>"
+}}
+
+Rules:
+- Explain every technical term in parentheses on first use, e.g. "transformer (an AI model that processes text in parallel)"
+- real_world_examples must be specific: "reduces doctor review time from 20 min to 2 min" not "useful in healthcare"
+- summary must not exceed {OLLAMA_SUMMARY_MAX_CHARS} characters
+- If something is not stated in the paper, write "not specified in the paper"
+- Output JSON ONLY
+"""
+
+
+def system_prompt_for_provider(
+    language: str | None = None,
+    provider: str | None = None,
+) -> str:
+    """Return the system prompt appropriate for the given provider and language.
+
+    OpenAI, Anthropic, and Google receive the full elaborated prompt in the
+    requested language.  Ollama always receives the compact English prompt
+    (faster tokenisation, better instruction-following on small models), with
+    a language note appended when the output language is not English.
+    """
+    lang = normalize_language(language)
+    if (provider or "").lower() == "ollama":
+        prompt = OLLAMA_SYSTEM_PROMPT_EN
+        note = _OLLAMA_LANG_NOTES.get(lang, "")
+        if note:
+            prompt = prompt.rstrip() + f"\n\n{note}\n"
+        return prompt
+    return SYSTEM_PROMPTS[lang]

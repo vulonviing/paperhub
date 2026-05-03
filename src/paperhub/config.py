@@ -89,6 +89,32 @@ def save_user_config_value(key: str, value: str, path: Path | None = None) -> Pa
     return config_path
 
 
+def delete_user_config_value(key: str, path: Path | None = None) -> tuple[Path, bool]:
+    """Remove one key from PaperHub's user config dotenv file.
+
+    Returns (config_path, was_present).
+    """
+
+    config_path = path or user_config_env_path()
+    values = read_user_config_values(config_path)
+    existed = key in values
+    if not existed:
+        return config_path, False
+
+    del values[key]
+    lines = [
+        "# PaperHub user config. Do not commit this file.",
+        "# Managed by `paperhub set-key` and the interactive `/set-key` command.",
+        "",
+    ]
+    for existing_key in sorted(values):
+        lines.append(f"{existing_key}={_quote_dotenv_value(values[existing_key])}")
+    config_path.write_text("\n".join(lines) + "\n", encoding="utf-8")
+    with suppress(OSError):
+        os.chmod(config_path, 0o600)
+    return config_path, True
+
+
 def _quote_dotenv_value(value: str) -> str:
     if re.fullmatch(r"[A-Za-z0-9_./:=@+\-]*", value):
         return value
@@ -137,6 +163,14 @@ class Settings(BaseSettings):
         default=DEFAULT_MODELS["google"],
         alias="PAPERHUB_GOOGLE_MODEL",
     )
+    paperhub_ollama_model: str = Field(
+        default=DEFAULT_MODELS["ollama"],
+        alias="PAPERHUB_OLLAMA_MODEL",
+    )
+    paperhub_ollama_base_url: str = Field(
+        default="http://localhost:11434/v1",
+        alias="PAPERHUB_OLLAMA_BASE_URL",
+    )
     paperhub_concurrency: int = Field(default=5, alias="PAPERHUB_CONCURRENCY")
     paperhub_max_pdf_chars: int = Field(default=60_000, alias="PAPERHUB_MAX_PDF_CHARS")
     paperhub_cache_dir: str | None = Field(default=None, alias="PAPERHUB_CACHE_DIR")
@@ -169,6 +203,7 @@ class Settings(BaseSettings):
             "anthropic": self.paperhub_anthropic_model,
             "openai": self.paperhub_openai_model,
             "google": self.paperhub_google_model,
+            "ollama": self.paperhub_ollama_model,
         }.get(chosen)
         return provider_specific or default_model_for_provider(chosen)
 

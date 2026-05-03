@@ -111,7 +111,10 @@ def test_set_key_runs_llm_health_check(tmp_path, monkeypatch) -> None:
     monkeypatch.setattr(
         cli,
         "load_settings",
-        lambda: Settings(_env_file=None, PAPERHUB_OPENAI_MODEL="gpt-5.4-mini"),
+        lambda: Settings(  # type: ignore[call-arg]
+            _env_file=None,
+            PAPERHUB_OPENAI_MODEL="gpt-5.4-mini",
+        ),
     )
 
     async def fake_check(provider, **kwargs):
@@ -164,7 +167,10 @@ def test_set_key_warns_when_shell_env_overrides_saved_key(tmp_path, monkeypatch)
     monkeypatch.setattr(
         cli,
         "load_settings",
-        lambda: Settings(_env_file=None, PAPERHUB_OPENAI_MODEL="gpt-5.4-mini"),
+        lambda: Settings(  # type: ignore[call-arg]
+            _env_file=None,
+            PAPERHUB_OPENAI_MODEL="gpt-5.4-mini",
+        ),
     )
 
     async def fake_check(provider, **kwargs):

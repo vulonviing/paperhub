@@ -13,23 +13,35 @@ paperhub
 Inside the launcher, type `/help` to see the command list. Common commands:
 
 ```text
+/help
+/status
+/version
 /provider
 /provider openai
-/version
+/provider ollama
 /model
 /model gpt-5.4-mini
+/model gpt-4.1-mini
 /language
+/language tr
 /date 2026-05
 /date 2026-05-15
 /date 2026-W18
 /date 2026-05-01 2026-05-31
 /top 5
+/concurrency 2
 /metadata
 /run
 /set-key openai
 /keys
+/check-llm
+/check-llm ollama
 /config-path
 /api-keys
+/clear-cache
+/clear-cache summaries
+/clear-cache pdfs
+/clear-cache keys openai
 /quit
 ```
 
@@ -46,9 +58,10 @@ Inside the launcher, type `/help` to see the command list. Common commands:
 The launcher shows the current run details — provider, model, API key status,
 date range, top_n — in a dashboard. Use `/set-key` to save provider keys in
 PaperHub's user config file, and use `/provider` and `/model` to switch
-between providers and models. `/metadata` is safe for setup checks because it
-does not call an LLM. `/run` uses the selected provider and requires that
-provider's API key.
+between providers and models, including local Ollama models. `/metadata` is
+safe for setup checks because it does not call an LLM. `/run` uses the
+selected provider; cloud providers require an API key, while Ollama requires a
+running local Ollama server and a pulled model.
 
 ## Notebook Quickstarts
 

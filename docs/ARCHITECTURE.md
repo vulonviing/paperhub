@@ -26,8 +26,8 @@ the user-facing workflow in `README.md`.
                  PaperAgent x N
               ├─ PDF download (cached)
               ├─ extract_text (pypdf → pdfplumber fallback)
-              ├─ LLMClient.complete (anthropic | openai | google)
-              └─ post-validation (<=6000 chars, JSON repair)
+              ├─ LLMClient.complete (anthropic | openai | google | ollama)
+              └─ post-validation (provider prompt cap + 6000-char model guard, JSON repair)
                     │
                     ▼  list[PaperSummary]
                 formatter
@@ -42,13 +42,15 @@ the user-facing workflow in `README.md`.
 - **PDF text extraction** uses `pypdf` first (fast); if the result is too
   short it tries `pdfplumber`. Both extractors are wrapped to never raise.
 - **LLM access** is gated by an `LLMClient` protocol. `PaperAgent` knows
-  nothing about Anthropic/OpenAI/Google internals. Provider SDKs are imported
-  lazily inside their respective client classes.
+  nothing about Anthropic/OpenAI/Google/Ollama internals. Provider SDKs are
+  imported lazily inside their respective client classes. `OllamaClient` uses
+  Ollama's native local `/api/chat` endpoint with a JSON schema first, then
+  falls back to Ollama's OpenAI-compatible `/v1/chat/completions` endpoint.
 - **Cache** is a single SQLite database under the OS-specific user cache
   directory. Three
-  tables: `paper_meta`, `pdf_text`, and `summary(arxiv_id, model)`. Summary
-  cache keys include the model identifier so swapping models does not return
-  stale results.
+  tables: `paper_meta`, `pdf_text`, and `summary(arxiv_id, model, language)`.
+  Summary cache keys include the model identifier and output language so
+  swapping models or languages does not return stale results.
 
 ## Failure isolation
 
@@ -80,14 +82,16 @@ payloads or user code constructs `PaperSummary(summary_tr=...)`.
 
 ## Length Enforcement
 
-The 6000-character cap on `summary` is enforced in three places:
+The generated `summary` length is controlled in layers:
 
-1. The system prompt instructs the model that the limit is hard in the selected
+1. Cloud-provider prompts ask for at most 3000 characters in the selected
    output language.
-2. `paper_agent._build_summary` calls `trim_to_sentence_boundary` on the
-   model output before constructing the Pydantic model.
-3. The `PaperSummary.summary` field has `max_length=6000` and a
-   `field_validator` that double-checks at construction time.
+2. Ollama prompts ask for at most 1000 characters, which keeps local generation
+   latency reasonable on small models.
+3. `paper_agent._build_summary` calls `trim_to_sentence_boundary` on the model
+   output before constructing the Pydantic model.
+4. `PaperSummary.summary` has a backward-compatible `max_length=6000`
+   validator as a final guard.
 
 If JSON parsing fails on the first attempt, the agent retries once with an
 explicit "your previous output was invalid; produce JSON only" instruction.
@@ -110,11 +114,13 @@ suite run without provider credentials.
 
 Model resolution is provider-aware. If the caller omits `model`, `PaperHub`
 uses the selected provider's default model (`PAPERHUB_ANTHROPIC_MODEL`,
-`PAPERHUB_OPENAI_MODEL`, or `PAPERHUB_GOOGLE_MODEL`). `PAPERHUB_MODEL` is a
-global override, but when it clearly belongs to a different provider it is
-ignored so that a Claude model id is not sent to OpenAI or Google.
-OpenAI also reads `PAPERHUB_OPENAI_REASONING_EFFORT`, defaulting to `xhigh`
-for GPT-5.4 mini unless the value is set empty. OpenAI reasoning models use a
+`PAPERHUB_OPENAI_MODEL`, `PAPERHUB_GOOGLE_MODEL`, or
+`PAPERHUB_OLLAMA_MODEL`). `PAPERHUB_MODEL` is a global override, but when it
+clearly belongs to a different provider it is ignored so that a Claude model
+id is not sent to OpenAI, Google, or Ollama. Ollama also reads
+`PAPERHUB_OLLAMA_BASE_URL`, defaulting to `http://localhost:11434/v1`.
+OpenAI reads `PAPERHUB_OPENAI_REASONING_EFFORT`, defaulting to `medium` for
+GPT-5.4 mini unless the value is set empty. OpenAI reasoning models use a
 larger minimum completion budget because hidden reasoning tokens and visible
 JSON output share the same completion limit.
 

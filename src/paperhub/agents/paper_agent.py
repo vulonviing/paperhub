@@ -27,7 +27,7 @@ from .prompts import (
     SUMMARY_MAX_CHARS,
     build_messages,
     repair_instruction,
-    system_prompt,
+    system_prompt_for_provider,
 )
 
 _LOG = get_logger("paperhub.agent")
@@ -104,21 +104,29 @@ class PaperAgent:
             self.cache.put_pdf_text(self.paper.arxiv_id, text)
         return text
 
+    # Fields that must contain real text — empty strings are treated as failures.
+    _REQUIRED_CONTENT_FIELDS = ("motivation", "method", "findings", "summary")
+
     async def _summarize(self, text: str) -> dict:
+        provider = getattr(self.llm, "provider", None)
+        sys_prompt = system_prompt_for_provider(self.language, provider)
         messages = build_messages(
             self.paper,
             text,
             max_pdf_chars=self.max_pdf_chars,
             language=self.language,
+            provider=provider,
         )
         raw = await self.llm.complete(
-            system=system_prompt(self.language),
+            system=sys_prompt,
             messages=messages,
             max_tokens=2048,
             temperature=0.3,
         )
         try:
-            return self._parse_json(raw)
+            payload = self._parse_json(raw)
+            self._check_empty_fields(payload)
+            return payload
         except Exception as exc:
             messages = list(messages) + [
                 {
@@ -129,12 +137,14 @@ class PaperAgent:
                 }
             ]
             raw = await self.llm.complete(
-                system=system_prompt(self.language),
+                system=sys_prompt,
                 messages=messages,
                 max_tokens=2048,
                 temperature=0.2,
             )
-            return self._parse_json(raw)
+            payload = self._parse_json(raw)
+            self._check_empty_fields(payload)
+            return payload
 
     @staticmethod
     def _parse_json(raw: str) -> dict:
@@ -143,6 +153,15 @@ class PaperAgent:
         if not isinstance(data, dict):
             raise ValueError("LLM JSON is not an object")
         return data
+
+    def _check_empty_fields(self, payload: dict) -> None:
+        """Raise ValueError if any required content field is empty or missing."""
+        empty = [f for f in self._REQUIRED_CONTENT_FIELDS if not str(payload.get(f, "")).strip()]
+        if empty:
+            fields = ", ".join(empty)
+            if self.language == "tr":
+                raise ValueError(f"şu alanlar boş geldi: {fields}")
+            raise ValueError(f"fields returned empty: {fields}")
 
     def _build_summary(self, payload: dict, text: str, t0: float) -> PaperSummary:
         summary_text = payload.get("summary", payload.get("summary_tr", ""))

@@ -14,7 +14,12 @@ DEFAULT_MODELS = {
     "anthropic": "claude-sonnet-4-6",
     "openai": "gpt-5.4-mini",
     "google": "gemini-3-flash-preview",
+    "ollama": "gemma4:e2b",
 }
+
+# Cheaper OpenAI alternative — no reasoning budget, standard chat pricing.
+OPENAI_CHEAPER_ALTERNATIVE = "gpt-4.1-mini"
+
 DEFAULT_OPENAI_REASONING_EFFORT = "medium"
 DEFAULT_PROVIDER = "openai"
 
@@ -50,6 +55,9 @@ def infer_provider_from_model(model: str | None) -> str | None:
         return "openai"
     if lowered.startswith(("gemini", "google")):
         return "google"
+    # Common Ollama model families — checked last so cloud prefixes take priority.
+    if lowered.startswith(("gemma", "llama", "mistral", "qwen", "phi", "deepseek", "nomic")):
+        return "ollama"
     return None
 
 
@@ -72,6 +80,7 @@ def build_llm(
     *,
     api_key: str | None = None,
     openai_reasoning_effort: str | None = DEFAULT_OPENAI_REASONING_EFFORT,
+    ollama_base_url: str | None = None,
 ) -> LLMClient:
     """Construct the LLM client for the given model/provider.
 
@@ -97,4 +106,8 @@ def build_llm(
         from .google_client import GoogleClient
 
         return GoogleClient(model=resolved_model, api_key=api_key)
+    if chosen == "ollama":
+        from .ollama_client import OllamaClient
+
+        return OllamaClient(model=resolved_model, base_url=ollama_base_url)
     raise ValueError(f"unknown provider: {chosen}")

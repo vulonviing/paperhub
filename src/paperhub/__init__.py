@@ -38,7 +38,7 @@ __all__ = [
     "render_plain",
 ]
 
-__version__ = "0.1.3"
+__version__ = "0.1.6"
 
 
 class PaperHub:
@@ -81,6 +81,7 @@ class PaperHub:
             provider=self.provider,
             api_key=provider_api_key,
             openai_reasoning_effort=self.openai_reasoning_effort,
+            ollama_base_url=self.settings.paperhub_ollama_base_url,
         )
 
     def run(
@@ -146,9 +147,7 @@ class PaperHub:
     ) -> RunRequest:
         request_language = normalize_language(language or self.language)
         if period is None:
-            raise ValueError(
-                "Provide period= (e.g. period='month', year=2026, month=5)"
-            )
+            raise ValueError("Provide period= (e.g. period='month', year=2026, month=5)")
         if period not in get_args(Period):
             allowed = ", ".join(get_args(Period))
             raise ValueError(f"period must be one of: {allowed}")
@@ -195,6 +194,7 @@ class PaperHub:
             "anthropic": self.settings.anthropic_api_key,
             "openai": self.settings.openai_api_key,
             "google": self.settings.google_api_key,
+            "ollama": None,  # Ollama is local — no API key
         }.get(provider)
 
 

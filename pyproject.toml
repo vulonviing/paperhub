@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "paperhub"
-version = "0.1.4"
+version = "0.1.6"
 description = "Fetch HuggingFace Daily Papers and produce Jupyter-friendly AI summaries — one paper, one agent."
 readme = "README.md"
 requires-python = ">=3.10"
@@ -67,7 +67,7 @@ Issues = "https://github.com/vulonviing/paperhub/issues"
 packages = ["src/paperhub"]
 
 [tool.hatch.build.targets.sdist]
-include = [
+only-include = [
     "src/paperhub",
     "docs/API_KEYS.md",
     "docs/ARCHITECTURE.md",
@@ -80,6 +80,7 @@ include = [
     "pyproject.toml",
 ]
 exclude = [
+    "/.gitignore",
     ".claude",
     "starter-template",
     "docs/PUBLISHING.md",
