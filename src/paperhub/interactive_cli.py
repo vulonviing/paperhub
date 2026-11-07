@@ -28,12 +28,19 @@ from rich.text import Text
 
 from . import PaperHub, __version__, load_settings
 from .agents.base import (
+    CLI_EXECUTABLES,
+    CLI_PROVIDERS,
     DEFAULT_MODELS,
     DEFAULT_PROVIDER,
     OPENAI_CHEAPER_ALTERNATIVE,
+    cli_installed,
     default_model_for_provider,
     infer_provider_from_model,
+    is_cli_provider,
+    provider_accepts_model,
 )
+from .agents.cli_client import list_cli_models
+from .agents.cli_models import cli_effort_levels, default_cli_model, is_unknown_model
 from .agents.health import LLMHealthCheck, check_llm
 from .config import delete_user_config_value, save_user_config_value, user_config_env_path
 from .dates import pretty_period, resolve_range
@@ -42,6 +49,7 @@ from .formatter import LABELS
 from .localization import normalize_language
 from .models import PaperSummary, RunRequest
 from .orchestrator import run_all
+from .utils import UNSUPPORTED_PLATFORM_MESSAGE, is_unsupported_platform
 
 
 def _humanize_bytes(n: int) -> str:
@@ -90,10 +98,13 @@ def find_project_root(start: Path) -> Path:
 
 REPO_ROOT = find_project_root(Path.cwd().resolve())
 
-PROVIDERS = ("openai", "anthropic", "google", "ollama")
-LOCAL_PROVIDERS = frozenset({"ollama"})
+PROVIDERS = ("claude-cli", "codex-cli", "openai", "anthropic", "google", "ollama")
+# Providers that need no API key: local Ollama and the signed-in agent CLIs.
+LOCAL_PROVIDERS = frozenset({"ollama", *CLI_PROVIDERS})
 LANGUAGES = ("en", "tr")
 MODEL_CHOICES = (
+    ("claude-cli", default_model_for_provider("claude-cli")),
+    ("codex-cli", default_model_for_provider("codex-cli")),
     ("openai", DEFAULT_MODELS["openai"]),
     ("openai", OPENAI_CHEAPER_ALTERNATIVE),  # gpt-4.1-mini — budget option
     ("anthropic", DEFAULT_MODELS["anthropic"]),
@@ -101,11 +112,14 @@ MODEL_CHOICES = (
     ("ollama", "gemma4:e2b"),  # local — ~2 B params
     ("ollama", "gemma4:e4b"),  # local — ~4 B params
 )
+OPENAI_EFFORT_LEVELS = ("low", "medium", "high")
 KEY_ENV_BY_PROVIDER: dict[str, str | None] = {
     "anthropic": "ANTHROPIC_API_KEY",
     "openai": "OPENAI_API_KEY",
     "google": "GOOGLE_API_KEY",
     "ollama": None,  # No API key — Ollama is a local service
+    "claude-cli": None,  # Uses the signed-in `claude` CLI
+    "codex-cli": None,  # Uses the signed-in `codex` CLI
 }
 
 LOGO = r"""
@@ -123,8 +137,19 @@ LOGO = r"""
 
 DOC_FALLBACKS = {
     "docs/API_KEYS.md": """
-# PaperHub API Keys
+# PaperHub Providers and API Keys
 
+Recommended: use a signed-in agent CLI. No API key is needed.
+
+```bash
+paperhub check-llm claude-cli   # uses your `claude` login
+paperhub check-llm codex-cli    # uses your `codex` login
+paperhub --provider claude-cli
+```
+
+PaperHub picks an installed CLI automatically when no provider is configured.
+
+API keys are only needed for the API providers (Jupyter, CI, servers).
 Save provider keys with:
 
 ```bash
@@ -164,11 +189,15 @@ project's `.env`. Shell environment variables such as `OPENAI_API_KEY`,
     "docs/HOW_TO_START.md": """
 # PaperHub How To Start
 
+Supported platform: macOS only.
+
 ```bash
 pip install paperhub
-paperhub set-key openai
+paperhub check-llm claude-cli   # or codex-cli; no API key needed
 paperhub
 ```
+
+Prefer an API provider? Run `paperhub set-key openai` instead.
 
 Common launcher commands:
 
@@ -176,7 +205,7 @@ Common launcher commands:
 /help
 /status
 /provider
-/provider ollama
+/provider claude-cli
 /version
 /model
 /date 2026-05
@@ -228,6 +257,7 @@ class LauncherState:
     end: date | None
     top_n: int
     concurrency: int
+    effort: str | None = None
 
 
 def provider_key(settings, provider: str) -> str | None:
@@ -240,6 +270,43 @@ def provider_key(settings, provider: str) -> str | None:
 
 def effective_model(settings, state: LauncherState) -> str:
     return state.model or settings.model_for_provider(state.provider)
+
+
+def effort_levels(provider: str, model: str | None) -> list[str]:
+    """Effort levels `provider` accepts for `model`; empty when it has no effort knob."""
+
+    if provider == "openai":
+        return list(OPENAI_EFFORT_LEVELS)
+    return cli_effort_levels(provider, model)
+
+
+def supports_effort(state: LauncherState) -> bool:
+    """Whether the selected provider/model has an effort setting."""
+
+    return bool(effort_levels(state.provider, effective_model(load_settings(), state)))
+
+
+def effective_effort(settings, state: LauncherState) -> str | None:
+    """The effort that will be used, or None when the provider has none.
+
+    A stale pick (e.g. left over from another provider or model) is ignored in
+    favour of the configured default.
+    """
+
+    model = effective_model(settings, state)
+    if state.effort and state.effort in effort_levels(state.provider, model):
+        return state.effort
+    return settings.effort_for_provider(state.provider)
+
+
+def model_with_effort(settings, state: LauncherState) -> str:
+    """`model · effort high` label for dashboards; never says "default"."""
+
+    model = effective_model(settings, state)
+    if is_unknown_model(model) and is_cli_provider(state.provider):
+        model = f"chosen by `{CLI_EXECUTABLES[state.provider]}`"
+    effort = effective_effort(settings, state)
+    return f"{model} · effort {effort}" if effort else model
 
 
 def build_request(state: LauncherState) -> RunRequest:
@@ -259,15 +326,22 @@ def build_request(state: LauncherState) -> RunRequest:
 def provider_table(settings, state: LauncherState) -> Table:
     table = Table(box=box.SIMPLE, show_header=True, header_style="bold")
     table.add_column("Provider")
-    table.add_column("API key")
-    table.add_column("Env")
+    table.add_column("Auth")
+    table.add_column("Env / command")
     table.add_column("Default model")
     for provider in PROVIDERS:
-        is_local = provider in LOCAL_PROVIDERS
         has_key = bool(provider_key(settings, provider))
         marker = "selected" if provider == state.provider else ""
-        key_status = "local — no key" if is_local else ("ready" if has_key else "missing")
-        env_var = KEY_ENV_BY_PROVIDER.get(provider) or "(local)"
+        if is_cli_provider(provider):
+            key_status = "CLI found" if cli_installed(provider) else "CLI not installed"
+            env_var = CLI_EXECUTABLES[provider]
+        else:
+            key_status = (
+                "local — no key"
+                if provider in LOCAL_PROVIDERS
+                else ("ready" if has_key else "missing")
+            )
+            env_var = KEY_ENV_BY_PROVIDER.get(provider) or "(local)"
         table.add_row(
             f"{provider} {marker}".strip(),
             key_status,
@@ -294,13 +368,19 @@ def current_run_table(settings, state: LauncherState) -> Table:
         top_n = str(state.top_n)
 
     selected_key = provider_key(settings, state.provider)
-    if state.provider in LOCAL_PROVIDERS:
+    if is_cli_provider(state.provider):
+        key_status = (
+            "signed-in CLI — no key needed"
+            if cli_installed(state.provider)
+            else f"`{CLI_EXECUTABLES[state.provider]}` not found on PATH"
+        )
+    elif state.provider in LOCAL_PROVIDERS:
         key_status = "local LLM — no key needed"
     else:
         key_status = "ready" if selected_key else "missing"
     table.add_row("Provider", state.provider)
-    table.add_row("Provider API key", key_status)
-    table.add_row("Model", effective_model(settings, state))
+    table.add_row("Provider auth", key_status)
+    table.add_row("Model", model_with_effort(settings, state))
     table.add_row("Language", state.language)
     table.add_row("Period", period)
     table.add_row("Date range", date_range)
@@ -327,13 +407,16 @@ def render_home(console: Console, state: LauncherState, notice: str | None = Non
     status_panel(console, state)
     if notice:
         console.print(notice)
+    effort_hint = "/effort  " if supports_effort(state) else ""
     console.print(
-        "[dim]Commands: /run  /model  /provider  /date  /top  /check-llm  /set-key  "
+        "[dim]Commands: /run  /model  "
+        f"{effort_hint}"
+        "/provider  /date  /top  /check-llm  /set-key  "
         "/metadata  /keys  — type [bold]/help[/bold] for the full list  ·  /quit to exit[/dim]"
     )
 
 
-def command_table() -> Table:
+def command_table(state: LauncherState | None = None) -> Table:
     table = Table(
         box=box.SIMPLE_HEAD,
         show_header=True,
@@ -353,13 +436,18 @@ def command_table() -> Table:
         ("/version", "", "Show the installed PaperHub CLI version."),
         (
             "/provider",
-            "/provider openai",
-            "Switch provider. Opens picker when called with no argument.",
+            "/provider claude-cli",
+            "Switch provider (claude-cli, codex-cli, openai, ...). No argument opens a picker.",
         ),
         (
             "/model",
             "/model gpt-5.4-mini",
             "Switch model. Use 'default' to reset, 'custom' to free-type.",
+        ),
+        (
+            "/effort",
+            "/effort high",
+            "Set reasoning effort (claude-cli, codex-cli, openai). 'default' resets.",
         ),
         ("/language", "/language tr", "Set output language. Options: en, tr."),
         ("/date", "/date 2026-05", "Set period — month. Format: YYYY-MM"),
@@ -375,7 +463,11 @@ def command_table() -> Table:
         ("/concurrency", "/concurrency 2", "Set how many paper agents can run at once."),
         ("/metadata", "", "Fetch paper list from HuggingFace without calling the LLM."),
         ("/run", "", "Run the full pipeline: fetch → download PDFs → summarize."),
-        ("/set-key", "/set-key openai", "Save a provider API key to PaperHub's user config file."),
+        (
+            "/set-key",
+            "/set-key openai",
+            "Save an API key (only needed for API providers, not CLIs).",
+        ),
         ("/keys", "", "Show provider key status."),
         (
             "/check-llm",
@@ -397,6 +489,10 @@ def command_table() -> Table:
         ("/quit", "", "Exit the launcher."),
     ]
 
+    # /effort only applies to providers with an effort setting (CLIs, OpenAI).
+    if state is not None and not supports_effort(state):
+        rows = [row for row in rows if "/effort" not in row[:2]]
+
     for cmd, example, desc in rows:
         table.add_row(cmd, example, desc)
 
@@ -412,6 +508,11 @@ def model_table() -> Table:
     notes = {
         ("openai", DEFAULT_MODELS["openai"]): "default — reasoning model",
         ("openai", OPENAI_CHEAPER_ALTERNATIVE): "budget option — standard chat pricing",
+        (
+            "claude-cli",
+            default_model_for_provider("claude-cli"),
+        ): "recommended — your `claude` login",
+        ("codex-cli", default_model_for_provider("codex-cli")): "your `codex` login",
         ("ollama", "gemma4:e2b"): "local — requires Ollama running",
         ("ollama", "gemma4:e4b"): "local — requires Ollama running",
     }
@@ -460,6 +561,14 @@ def save_api_key(console: Console, state: LauncherState, args: list[str]) -> str
         if state.provider != provider:
             state.provider = provider
             state.model = None
+        if is_cli_provider(provider):
+            exe = CLI_EXECUTABLES[provider]
+            console.print(
+                f"[yellow]{provider} uses your signed-in `{exe}` CLI — no API key is required.[/yellow]\n"
+                f"Make sure `{exe}` is installed and signed in, then PaperHub will use it."
+            )
+            health = run_llm_health_check(console, state, provider)
+            return format_health_check(health)
         console.print(
             f"[yellow]{provider} is a local provider — no API key is required.[/yellow]\n"
             "Make sure Ollama is running: [dim]ollama serve[/dim]\n"
@@ -509,7 +618,13 @@ def run_llm_health_check(
     settings = load_settings()
     model = state.model if provider == state.provider else None
     resolved_model = model or settings.model_for_provider(provider)
-    console.print(f"[cyan]Checking {provider} / {resolved_model}...[/cyan]")
+    effort = (
+        effective_effort(settings, state)
+        if provider == state.provider
+        else settings.effort_for_provider(provider)
+    )
+    label = f"{resolved_model} · effort {effort}" if effort else resolved_model
+    console.print(f"[cyan]Checking {provider} / {label}...[/cyan]")
     return _run_async(
         check_llm(
             provider,
@@ -517,6 +632,7 @@ def run_llm_health_check(
             api_key=api_key or provider_key(settings, provider),
             openai_reasoning_effort=settings.openai_reasoning_effort(),
             ollama_base_url=settings.paperhub_ollama_base_url,
+            effort=effort,
         )
     )
 
@@ -977,6 +1093,7 @@ def run_full_pipeline(console: Console, state: LauncherState) -> None:
         language=state.language,
         concurrency=state.concurrency,
         settings=settings,
+        effort=effective_effort(settings, state),
     )
 
     try:
@@ -996,7 +1113,11 @@ def apply_model_choice(state: LauncherState, model: str | None) -> str:
 
     inferred_provider = infer_provider_from_model(model)
     state.model = model
-    if inferred_provider and inferred_provider in PROVIDERS and inferred_provider != state.provider:
+    if (
+        inferred_provider
+        and inferred_provider in PROVIDERS
+        and not provider_accepts_model(state.provider, inferred_provider)
+    ):
         state.provider = inferred_provider
         return f"Provider set to {state.provider}; model set to {state.model}."
     return f"Model set to {state.model}."
@@ -1019,6 +1140,8 @@ def choose_model(console: Console, state: LauncherState) -> str | None:
     # When the active provider is Ollama, show locally installed models.
     if state.provider == "ollama":
         return _choose_ollama_model(console, state)
+    if is_cli_provider(state.provider):
+        return _choose_cli_model(console, state)
 
     console.print(Panel(model_table(), border_style="magenta", title="/model"))
     numbered = [str(i) for i in range(1, len(MODEL_CHOICES) + 1)]
@@ -1040,6 +1163,74 @@ def choose_model(console: Console, state: LauncherState) -> str | None:
     state.provider = provider
     state.model = model
     return f"Provider set to {state.provider}; model set to {state.model}."
+
+
+def _choose_cli_model(console: Console, state: LauncherState) -> str | None:
+    """Model picker for claude-cli / codex-cli: the CLI's own models + default + custom."""
+
+    models = list_cli_models(state.provider)
+    cli_default = default_cli_model(state.provider)
+    table = Table(box=box.SIMPLE, show_header=True, header_style="bold")
+    table.add_column("Choice")
+    table.add_column("Model")
+    for idx, name in enumerate(models, 1):
+        table.add_row(str(idx), name)
+    table.add_row("default", cli_default)
+    table.add_row("custom", "Enter any model id")
+    console.print(Panel(table, border_style="magenta", title=f"/model — {state.provider}"))
+
+    numbered = [str(i) for i in range(1, len(models) + 1)]
+    choice = Prompt.ask("Choose model", choices=numbered + ["default", "custom"], default="default")
+    if choice == "default":
+        return apply_model_choice(state, None)
+    if choice == "custom":
+        value = Prompt.ask("Model id").strip()
+        if not value:
+            console.print("[red]Model id cannot be empty.[/red]")
+            return None
+        return apply_model_choice(state, value)
+    return apply_model_choice(state, models[int(choice) - 1])
+
+
+def choose_effort(console: Console, state: LauncherState) -> str | None:
+    settings = load_settings()
+    levels = effort_levels(state.provider, effective_model(settings, state))
+    if not levels:
+        console.print(f"[yellow]{state.provider} has no effort setting.[/yellow]")
+        return None
+    current = effective_effort(settings, state)
+    table = Table(box=box.SIMPLE, show_header=True, header_style="bold")
+    table.add_column("Choice")
+    table.add_column("Effort")
+    for idx, level in enumerate(levels, 1):
+        table.add_row(str(idx), level + ("  [dim](current)[/dim]" if level == current else ""))
+    default = settings.effort_for_provider(state.provider)
+    table.add_row("default", str(default))
+    console.print(Panel(table, border_style="magenta", title=f"/effort — {state.provider}"))
+    choice = Prompt.ask(
+        "Choose effort",
+        choices=[str(i) for i in range(1, len(levels) + 1)] + ["default"],
+        default=str(levels.index(current) + 1) if current in levels else "default",
+    )
+    if choice == "default":
+        return set_effort(state, None)
+    return set_effort(state, levels[int(choice) - 1])
+
+
+def set_effort(state: LauncherState, level: str | None) -> str | None:
+    """Apply an effort level; returns a notice, or None (after printing) if invalid."""
+
+    settings = load_settings()
+    if level is None or level.lower() in {"default", "none", "auto"}:
+        state.effort = None
+        return f"Effort set to {effective_effort(settings, state)}."
+    levels = effort_levels(state.provider, effective_model(settings, state))
+    if not levels:
+        return f"{state.provider} has no effort setting."
+    if level.lower() not in levels:
+        return f"Effort for {state.provider} must be one of: {', '.join(levels)}."
+    state.effort = level.lower()
+    return f"Effort set to {state.effort}."
 
 
 def _choose_ollama_model(console: Console, state: LauncherState) -> str | None:
@@ -1140,6 +1331,11 @@ def handle_set(console: Console, state: LauncherState, command: str, args: list[
             return apply_model_choice(state, custom_model)
         return apply_model_choice(state, value)
 
+    if command in {"effort", "e"}:
+        if not args:
+            return choose_effort(console, state)
+        return set_effort(state, args[0])
+
     if command in {"language", "lang", "l"}:
         if not args:
             return choose_language(state)
@@ -1222,7 +1418,7 @@ def needs_inline_prompt(line: str) -> bool:
     # Provider always triggers interactive model picker afterwards — skip spinner.
     if command in {"provider", "p"}:
         return True
-    if command in {"model", "m", "language", "lang", "l"} and len(parts) == 1:
+    if command in {"model", "m", "language", "lang", "l", "effort", "e"} and len(parts) == 1:
         return True
     if command in {"set-key", "apikey", "api-key"} and len(parts) <= 2:
         return True
@@ -1245,7 +1441,7 @@ def dispatch(console: Console, state: LauncherState, line: str) -> bool:
     if command in {"quit", "exit"}:
         return False
     if command in {"help", "?", "commands", "shortcuts"}:
-        console.print(command_table())
+        console.print(command_table(state))
         return True
     if command == "status":
         render_home(console, state)
@@ -1309,7 +1505,7 @@ def dispatch_with_loading(console: Console, state: LauncherState, line: str) -> 
 
 def initial_state(args: argparse.Namespace) -> LauncherState:
     settings = load_settings()
-    provider = (args.provider or settings.paperhub_provider or DEFAULT_PROVIDER).lower()
+    provider = (args.provider or settings.resolved_provider()).lower()
     if provider not in PROVIDERS:
         provider = DEFAULT_PROVIDER
     today = date.today()
@@ -1326,6 +1522,7 @@ def initial_state(args: argparse.Namespace) -> LauncherState:
         end=None,
         top_n=args.top_n or 5,
         concurrency=args.concurrency or min(settings.paperhub_concurrency, 2),
+        effort=args.effort.lower() if args.effort else None,
     )
 
 
@@ -1333,6 +1530,7 @@ def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Start the interactive PaperHub launcher.")
     parser.add_argument("--provider", choices=PROVIDERS, default=None)
     parser.add_argument("--model", default=None)
+    parser.add_argument("--effort", default=None, help="reasoning effort, e.g. low|medium|high")
     parser.add_argument("--language", choices=LANGUAGES, default="en")
     parser.add_argument("--top-n", type=int, default=None)
     parser.add_argument("--concurrency", type=int, default=None)
@@ -1374,13 +1572,16 @@ def dispatch_startup_command(
         return 0
     console.print(f"[red]Unknown command:[/red] {command}")
     console.print(
-        "[dim]Use `paperhub`, `paperhub version`, `paperhub set-key openai`, "
-        "`paperhub check-llm`, `paperhub check-llm ollama`, or `paperhub api-keys`.[/dim]"
+        "[dim]Use `paperhub`, `paperhub version`, `paperhub check-llm`, "
+        "`paperhub check-llm claude-cli`, `paperhub set-key openai`, or `paperhub api-keys`.[/dim]"
     )
     return 2
 
 
 def main() -> int:
+    if is_unsupported_platform():
+        Console(stderr=True).print(f"[red]{UNSUPPORTED_PLATFORM_MESSAGE}[/red]")
+        return 1
     os.chdir(REPO_ROOT)
     args = parse_args()
     console = Console()

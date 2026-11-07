@@ -1,8 +1,11 @@
 # PaperHub API Keys
 
-PaperHub only needs an API key for the cloud provider you choose for
-summarization. Local Ollama models and metadata-only checks do not require
-any key.
+PaperHub only needs an API key for the cloud API provider you choose for
+summarization (`openai`, `anthropic`, `google`). The signed-in agent CLIs
+(`claude-cli`, `codex-cli`), local Ollama models and metadata-only checks do
+not require any key. **Prefer a CLI when you have one:**
+`paperhub check-llm claude-cli`. API keys are mainly for notebooks, CI and
+servers.
 
 ## Recommended Setup
 
@@ -34,8 +37,7 @@ Inside the interactive launcher, use:
 
 PaperHub stores these values in an app-specific dotenv file, not in the
 current project's `.env`. On macOS this is typically
-`~/Library/Application Support/paperhub/.env`; on Linux it is usually
-`~/.config/paperhub/.env`. The file is written with user-only permissions
+`~/Library/Application Support/paperhub/.env`. The file is written with user-only permissions
 where the OS supports that.
 
 Every `set-key` command saves the key and then sends one tiny request to the

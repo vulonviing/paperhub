@@ -5,6 +5,8 @@ the Python/Jupyter API. The terminal launcher is the primary mode.
 
 ## 1. Install
 
+PaperHub supports **macOS only**. Linux and Windows are not supported.
+
 ### From PyPI (recommended)
 
 ```bash
@@ -26,9 +28,24 @@ cd paperhub
 pip install -e ".[dev]"
 ```
 
-## 2. Add API Keys
+## 2. Pick how PaperHub talks to an LLM
 
-For cloud providers, save keys into PaperHub's per-user config:
+### Recommended: a signed-in agent CLI (no API key)
+
+If you already use Claude Code or Codex CLI, PaperHub can run it for you with
+your existing login:
+
+```bash
+paperhub check-llm claude-cli   # needs `claude`, signed in
+paperhub check-llm codex-cli    # needs `codex`, signed in (`codex login`)
+```
+
+With no provider configured, PaperHub auto-selects an installed CLI.
+
+### Fallback: API keys
+
+For notebooks, CI, or machines without a CLI, save keys into PaperHub's
+per-user config:
 
 ```bash
 paperhub set-key openai
@@ -52,7 +69,8 @@ ollama pull gemma4:e4b   # ~4 B params — better quality
 paperhub check-llm ollama
 ```
 
-PaperHub defaults to `openai`, but you can choose another provider with the
+Without any configuration PaperHub auto-detects a provider (installed CLI, then
+a provider with an API key, then `openai`). Choose another with the
 launcher's `/provider` command. Environment variables such as
 `OPENAI_API_KEY` still work and take priority over saved user config values.
 After each `set-key`, PaperHub immediately sends one tiny provider request and

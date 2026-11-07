@@ -96,6 +96,24 @@ The generated `summary` length is controlled in layers:
 If JSON parsing fails on the first attempt, the agent retries once with an
 explicit "your previous output was invalid; produce JSON only" instruction.
 
+## Providers
+
+`agents/base.py` defines the `LLMClient` protocol and `build_llm`. Besides the
+HTTP API clients (OpenAI, Anthropic, Google, Ollama) there is
+`agents/cli_client.py`, which runs a locally installed, signed-in agent CLI
+non-interactively (`claude -p` or `codex exec`), sends the prompt over stdin,
+disables tools, and runs from an empty temp directory. It needs no API key.
+`Settings.resolved_provider()` auto-detects a provider when
+`PAPERHUB_PROVIDER` is unset: installed CLI, then a provider with a key, then
+`openai`. CLI providers default to concurrency 2 and cannot honour
+`max_tokens`/`temperature`. `agents/cli_models.py` holds their model/effort
+metadata: Claude uses fixed aliases and `--effort`; for Codex the default model
+comes from `$CODEX_HOME/config.toml`, the model list and per-model effort levels
+from `models_cache.json`, and effort is sent as `-c model_reasoning_effort=...`.
+
+PaperHub supports macOS only; `paperhub` exits with a message on any other
+platform and `import paperhub` emits a `RuntimeWarning` there.
+
 ## Concurrency
 
 The orchestrator uses `asyncio.gather` with an `asyncio.Semaphore(5)` by

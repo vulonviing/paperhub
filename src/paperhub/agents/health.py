@@ -35,6 +35,7 @@ async def check_llm(
     openai_reasoning_effort: str | None = DEFAULT_OPENAI_REASONING_EFFORT,
     llm: LLMClient | None = None,
     ollama_base_url: str | None = None,
+    effort: str | None = None,
 ) -> LLMHealthCheck:
     """Send a tiny JSON request and verify that the selected LLM responds."""
 
@@ -50,6 +51,7 @@ async def check_llm(
             api_key=api_key,
             openai_reasoning_effort=openai_reasoning_effort,
             ollama_base_url=ollama_base_url,
+            effort=effort,
         )
         if is_ollama:
             system = (

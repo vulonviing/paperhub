@@ -11,6 +11,8 @@ Two ways to use PaperHub:
 
 ## Install
 
+Supported platform: **macOS only**. Linux and Windows are not supported.
+
 ```bash
 pip install paperhub
 ```
@@ -29,6 +31,42 @@ For local models via Ollama, no extra package is needed — install
 ollama pull gemma4:e2b   # ~2 B parameters, fast on CPU
 ollama pull gemma4:e4b   # ~4 B parameters, higher quality
 ```
+
+## Quick start: use a CLI you already have (no API key)
+
+If [Claude Code](https://claude.com/claude-code) (`claude`) or
+[Codex CLI](https://github.com/openai/codex) (`codex`) is installed and signed
+in, PaperHub uses it directly with your existing login or subscription:
+
+```bash
+paperhub check-llm claude-cli    # or: codex-cli
+paperhub
+```
+
+When no provider is configured, PaperHub picks automatically: an installed
+CLI first (`claude-cli`, then `codex-cli`), then a provider that has an API
+key, then `openai`. Override with `--provider`, `/provider`, or
+`PAPERHUB_PROVIDER`.
+
+CLI providers run with tools disabled from an empty temp directory, and
+default to concurrency 2 to stay within subscription rate limits.
+`max_tokens` and `temperature` cannot be set through these CLIs. Pass a
+model with `--model` (e.g. `--provider claude-cli --model sonnet`), pick one
+interactively with `/model` (Claude: `fable`/`opus`/`sonnet`; Codex: the models
+your account lists), set `PAPERHUB_CLAUDE_CLI_MODEL` / `PAPERHUB_CODEX_CLI_MODEL`,
+or leave it unset: Claude defaults to `sonnet`, Codex to the model in your
+`~/.codex/config.toml`. The dashboard always shows the concrete model plus its
+effort (e.g. `sonnet · effort medium`).
+
+Reasoning effort: `/effort` (or `--effort high`, `PAPERHUB_CLAUDE_CLI_EFFORT` /
+`PAPERHUB_CODEX_CLI_EFFORT`), default `medium`. Claude accepts
+`low|medium|high|xhigh|max`; Codex offers the levels its model supports
+(`ultra` is hidden because it auto-delegates to sub-agents). `/effort` also
+sets OpenAI's reasoning effort (`low|medium|high`). Effort is not part of the
+summary cache key, so cached summaries are reused across effort levels.
+
+API keys are the fallback for notebooks, CI and servers where no CLI is
+installed.
 
 ## Configuration
 
@@ -60,7 +98,7 @@ that check later with `paperhub check-llm` or `/check-llm`.
 | `OPENAI_API_KEY`                   | Default provider key                                            |
 | `ANTHROPIC_API_KEY`                | Optional, used when `--provider anthropic`                      |
 | `GOOGLE_API_KEY`                   | Optional, used when `--provider google`                         |
-| `PAPERHUB_PROVIDER`                | Override default provider (default: openai)                     |
+| `PAPERHUB_PROVIDER`                | `claude-cli`, `codex-cli`, `openai`, `anthropic`, `google`, `ollama` (default: auto-detect) |
 | `PAPERHUB_MODEL`                   | Optional global model override                                  |
 | `PAPERHUB_OPENAI_MODEL`            | OpenAI default model (default: gpt-5.4-mini)                    |
 | `PAPERHUB_OPENAI_REASONING_EFFORT` | OpenAI reasoning effort (default: medium)                       |
@@ -90,12 +128,15 @@ and run:
 /status
 /version
 /provider
+/provider claude-cli
 /provider openai
 /provider ollama
 /model
 /model gpt-5.4-mini
 /model gpt-4.1-mini
 /model default
+/effort
+/effort high
 /language
 /language tr
 /date 2026-05
@@ -145,6 +186,7 @@ paperhub version
 paperhub set-key openai
 paperhub keys
 paperhub check-llm
+paperhub check-llm claude-cli
 paperhub check-llm ollama
 paperhub api-keys
 paperhub config-path
@@ -155,8 +197,10 @@ paperhub clear-cache keys openai
 You can also pass startup flags:
 
 ```bash
+paperhub --provider claude-cli
 paperhub --provider anthropic
 paperhub --model claude-sonnet-4-6
+paperhub --provider codex-cli --effort high
 paperhub --provider ollama --model gemma4:e2b
 paperhub --language tr
 paperhub --top-n 10
@@ -168,6 +212,10 @@ paperhub --concurrency 2
 ```python
 from datetime import date
 from paperhub import PaperHub
+
+# Signed-in Claude Code / Codex CLI — no API key
+hub = PaperHub(provider="claude-cli")
+hub.run(period="month", year=2026, month=5, top_n=5)
 
 # OpenAI — default reasoning model
 hub = PaperHub(provider="openai")
@@ -254,9 +302,8 @@ export PAPERHUB_OLLAMA_BASE_URL=http://192.168.1.10:11434/v1
 ## Caching
 
 PaperHub caches metadata, PDF text, and summaries in
-the OS-specific user cache directory, for example
-`~/Library/Caches/paperhub/paperhub.sqlite` on macOS and
-`~/.cache/paperhub/paperhub.sqlite` on Linux. Override with
+the user cache directory, for example
+`~/Library/Caches/paperhub/paperhub.sqlite`. Override with
 `PAPERHUB_CACHE_DIR`.
 Summary entries are keyed by `(arxiv_id, model, language)`, so swapping models
 or output language gives you a clean re-run while keeping the PDF download

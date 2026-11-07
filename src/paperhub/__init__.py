@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import threading
+import warnings
 from collections.abc import Coroutine
 from datetime import date
 from pathlib import Path
@@ -11,7 +12,7 @@ from typing import Any, cast, get_args
 
 import httpx
 
-from .agents.base import DEFAULT_PROVIDER, LLMClient, build_llm
+from .agents.base import DEFAULT_PROVIDER, LLMClient, build_llm, is_cli_provider
 from .agents.health import LLMHealthCheck, check_llm
 from .cache import Cache
 from .config import Settings, load_settings
@@ -21,6 +22,7 @@ from .formatter import display_summaries, render_markdown, render_plain
 from .localization import OutputLanguage, normalize_language
 from .models import PaperMeta, PaperSummary, Period, RunRequest
 from .orchestrator import run_all
+from .utils import UNSUPPORTED_PLATFORM_MESSAGE, is_unsupported_platform
 
 __all__ = [
     "PaperHub",
@@ -38,7 +40,13 @@ __all__ = [
     "render_plain",
 ]
 
-__version__ = "0.1.6"
+__version__ = "0.2.0"
+
+# Concurrent CLI subprocesses count against the user's subscription limits.
+CLI_DEFAULT_CONCURRENCY = 2
+
+if is_unsupported_platform():
+    warnings.warn(UNSUPPORTED_PLATFORM_MESSAGE, RuntimeWarning, stacklevel=2)
 
 
 class PaperHub:
@@ -61,17 +69,32 @@ class PaperHub:
         settings: Settings | None = None,
         language: str | None = None,
         openai_reasoning_effort: str | None = None,
+        effort: str | None = None,
     ):
         self.settings = settings or load_settings()
-        self.provider = provider or self.settings.paperhub_provider
+        self.provider = (provider or self.settings.resolved_provider()).lower()
         self.model = model or self.settings.model_for_provider(self.provider)
-        self.concurrency = concurrency or self.settings.paperhub_concurrency
+        default_concurrency = (
+            min(self.settings.paperhub_concurrency, CLI_DEFAULT_CONCURRENCY)
+            if is_cli_provider(self.provider)
+            else self.settings.paperhub_concurrency
+        )
+        self.concurrency = concurrency or default_concurrency
         self.max_pdf_chars = max_pdf_chars or self.settings.paperhub_max_pdf_chars
         self.language: OutputLanguage = normalize_language(language)
+        # `effort` is the provider-neutral spelling: the reasoning effort for
+        # OpenAI, the `--effort` level for claude-cli / codex-cli.
+        if openai_reasoning_effort is None and self.provider == "openai":
+            openai_reasoning_effort = effort
         self.openai_reasoning_effort = (
             openai_reasoning_effort
             if openai_reasoning_effort is not None
             else self.settings.openai_reasoning_effort()
+        )
+        self.effort = effort or (
+            self.openai_reasoning_effort
+            if self.provider == "openai"
+            else self.settings.effort_for_provider(self.provider)
         )
         cache_root = Path(cache_dir) if cache_dir else self.settings.cache_dir()
         self.cache = Cache(cache_root)
@@ -82,6 +105,7 @@ class PaperHub:
             api_key=provider_api_key,
             openai_reasoning_effort=self.openai_reasoning_effort,
             ollama_base_url=self.settings.paperhub_ollama_base_url,
+            effort=self.effort,
         )
 
     def run(

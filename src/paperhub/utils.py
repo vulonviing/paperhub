@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import logging
 import re
+import sys
 from typing import Any
 
 from tenacity import (
@@ -22,6 +23,15 @@ if not _LOG.handlers:
     handler.setFormatter(logging.Formatter("%(asctime)s %(levelname)s %(name)s %(message)s"))
     _LOG.addHandler(handler)
 _LOG.setLevel(logging.WARNING)
+
+
+UNSUPPORTED_PLATFORM_MESSAGE = "PaperHub supports macOS only. Linux and Windows are not supported."
+
+
+def is_unsupported_platform() -> bool:
+    """True on any platform other than macOS."""
+
+    return sys.platform != "darwin"
 
 
 def get_logger(name: str = "paperhub") -> logging.Logger:

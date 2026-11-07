@@ -59,7 +59,7 @@ def test_api_keys_doc_fallback_when_docs_are_not_installed(tmp_path, monkeypatch
     cli.print_doc(console, "docs/API_KEYS.md")
 
     output = console.export_text()
-    assert "PaperHub API Keys" in output
+    assert "PaperHub Providers and API Keys" in output
     assert "Missing documentation file" not in output
 
 

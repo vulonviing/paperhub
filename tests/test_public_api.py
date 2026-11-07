@@ -68,10 +68,12 @@ def test_paperhub_uses_provider_default_model_when_model_omitted(tmp_path) -> No
     assert cast(Any, hub.llm)._api_key == "openai-key"
 
 
-def test_paperhub_defaults_to_openai(tmp_path) -> None:
+def test_paperhub_defaults_to_openai(tmp_path, monkeypatch) -> None:
     from paperhub import PaperHub
     from paperhub.config import Settings
 
+    monkeypatch.setattr("shutil.which", lambda name: None)
+    monkeypatch.delenv("PAPERHUB_PROVIDER", raising=False)
     settings = Settings(OPENAI_API_KEY="openai-key")
 
     hub = PaperHub(settings=settings, cache_dir=tmp_path / "cache")

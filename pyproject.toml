@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "paperhub"
-version = "0.1.6"
+version = "0.2.0"
 description = "Fetch HuggingFace Daily Papers and produce Jupyter-friendly AI summaries — one paper, one agent."
 readme = "README.md"
 requires-python = ">=3.10"
@@ -21,7 +21,7 @@ classifiers = [
     "Intended Audience :: Science/Research",
     "Intended Audience :: Developers",
     "License :: OSI Approved :: MIT License",
-    "Operating System :: OS Independent",
+    "Operating System :: MacOS",
     "Programming Language :: Python :: 3",
     "Programming Language :: Python :: 3.10",
     "Programming Language :: Python :: 3.11",

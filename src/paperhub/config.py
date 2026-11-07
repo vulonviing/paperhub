@@ -17,12 +17,16 @@ from pydantic import Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 from .agents.base import (
+    CLI_PROVIDERS,
     DEFAULT_MODELS,
     DEFAULT_OPENAI_REASONING_EFFORT,
     DEFAULT_PROVIDER,
     default_model_for_provider,
+    detect_provider,
     infer_provider_from_model,
+    provider_accepts_model,
 )
+from .agents.cli_models import DEFAULT_CLI_EFFORT
 
 APP_NAME = "paperhub"
 APP_AUTHOR = "paperhub"
@@ -145,7 +149,7 @@ class Settings(BaseSettings):
     openai_api_key: str | None = Field(default=None, alias="OPENAI_API_KEY")
     google_api_key: str | None = Field(default=None, alias="GOOGLE_API_KEY")
 
-    paperhub_provider: str = Field(default=DEFAULT_PROVIDER, alias="PAPERHUB_PROVIDER")
+    paperhub_provider: str | None = Field(default=None, alias="PAPERHUB_PROVIDER")
     paperhub_model: str | None = Field(default=None, alias="PAPERHUB_MODEL")
     paperhub_anthropic_model: str = Field(
         default=DEFAULT_MODELS["anthropic"],
@@ -163,6 +167,11 @@ class Settings(BaseSettings):
         default=DEFAULT_MODELS["google"],
         alias="PAPERHUB_GOOGLE_MODEL",
     )
+    # None means "use the CLI's concrete default" (see `default_cli_model`).
+    paperhub_claude_cli_model: str | None = Field(default=None, alias="PAPERHUB_CLAUDE_CLI_MODEL")
+    paperhub_codex_cli_model: str | None = Field(default=None, alias="PAPERHUB_CODEX_CLI_MODEL")
+    paperhub_claude_cli_effort: str | None = Field(default=None, alias="PAPERHUB_CLAUDE_CLI_EFFORT")
+    paperhub_codex_cli_effort: str | None = Field(default=None, alias="PAPERHUB_CODEX_CLI_EFFORT")
     paperhub_ollama_model: str = Field(
         default=DEFAULT_MODELS["ollama"],
         alias="PAPERHUB_OLLAMA_MODEL",
@@ -185,6 +194,23 @@ class Settings(BaseSettings):
         path.mkdir(parents=True, exist_ok=True)
         return path
 
+    def resolved_provider(self) -> str:
+        """Return the configured provider, auto-detecting one when unset.
+
+        Auto-detection prefers an installed agent CLI (claude, codex), then a
+        provider with an API key, then `DEFAULT_PROVIDER`.
+        """
+
+        if self.paperhub_provider:
+            return self.paperhub_provider.lower()
+        return detect_provider(
+            {
+                "openai": self.openai_api_key,
+                "anthropic": self.anthropic_api_key,
+                "google": self.google_api_key,
+            }
+        )
+
     def model_for_provider(self, provider: str | None = None) -> str:
         """Return the configured default model for a provider.
 
@@ -194,18 +220,34 @@ class Settings(BaseSettings):
         model id to OpenAI when `PAPERHUB_PROVIDER=openai`.
         """
 
-        chosen = (provider or self.paperhub_provider or DEFAULT_PROVIDER).lower()
+        chosen = (provider or self.resolved_provider() or DEFAULT_PROVIDER).lower()
         if self.paperhub_model:
             inferred = infer_provider_from_model(self.paperhub_model)
-            if inferred is None or inferred == chosen:
+            if provider_accepts_model(chosen, inferred):
                 return self.paperhub_model
         provider_specific = {
             "anthropic": self.paperhub_anthropic_model,
             "openai": self.paperhub_openai_model,
             "google": self.paperhub_google_model,
             "ollama": self.paperhub_ollama_model,
+            "claude-cli": self.paperhub_claude_cli_model,
+            "codex-cli": self.paperhub_codex_cli_model,
         }.get(chosen)
         return provider_specific or default_model_for_provider(chosen)
+
+    def effort_for_provider(self, provider: str | None = None) -> str | None:
+        """Return the effort level in use for a provider, or None if it has none."""
+
+        chosen = (provider or self.resolved_provider()).lower()
+        if chosen == "openai":
+            return self.openai_reasoning_effort()
+        configured = {
+            "claude-cli": self.paperhub_claude_cli_effort,
+            "codex-cli": self.paperhub_codex_cli_effort,
+        }.get(chosen)
+        if chosen in CLI_PROVIDERS:
+            return (configured or "").strip() or DEFAULT_CLI_EFFORT
+        return None
 
     def openai_reasoning_effort(self) -> str | None:
         """Return the configured OpenAI reasoning effort, or None when disabled."""
