@@ -527,3 +527,35 @@ async def test_subprocess_does_not_see_secret_env(path_with, monkeypatch) -> Non
     assert "OPENAI_API_KEY" not in seen
     assert "SOME_TOKEN" not in seen
     assert "PATH" in seen
+
+
+async def test_trusted_prompts_are_not_fenced(path_with) -> None:
+    _fake_cli(
+        path_with,
+        "codex",
+        """
+        import sys
+        stdin = sys.stdin.read()
+        out = sys.argv[sys.argv.index("--output-last-message") + 1]
+        open(out, "w").write(stdin)
+        """,
+    )
+    client = CLIClient(provider="codex-cli", untrusted_input=False)
+    stdin = await client.complete(system="SYS", messages=[{"role": "user", "content": "OURS"}])
+    assert "UNTRUSTED" not in stdin
+    assert stdin == "SYS\n\nOURS"
+
+
+async def test_health_check_does_not_use_untrusted_framing(path_with) -> None:
+    _fake_cli(
+        path_with,
+        "claude",
+        """
+        import json, sys
+        sys.stdin.read()
+        sp = sys.argv[sys.argv.index("--system-prompt") + 1]
+        ok = "UNTRUSTED" not in sp
+        print(json.dumps({"is_error": False, "result": json.dumps({"ok": ok})}))
+        """,
+    )
+    assert (await check_llm("claude-cli")).ok

@@ -53,6 +53,9 @@ async def check_llm(
             ollama_base_url=ollama_base_url,
             effort=effort,
         )
+        # The health-check prompt is ours, not third-party text.
+        if hasattr(client, "untrusted_input"):
+            client.untrusted_input = False
         if is_ollama:
             system = (
                 "You are a PaperHub provider health check. Return JSON only, "

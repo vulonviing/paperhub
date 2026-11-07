@@ -40,7 +40,7 @@ __all__ = [
     "render_plain",
 ]
 
-__version__ = "0.2.1"
+__version__ = "0.2.2"
 
 # Concurrent CLI subprocesses count against the user's subscription limits.
 CLI_DEFAULT_CONCURRENCY = 2
