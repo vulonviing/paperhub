@@ -9,6 +9,16 @@ Two ways to use PaperHub:
 1. **Terminal CLI** (`paperhub`) — interactive launcher with a REPL interface. **Primary mode.**
 2. **Python / Jupyter** — import `PaperHub` and call `hub.run(...)` directly.
 
+<p align="center">
+  <img src="https://raw.githubusercontent.com/vulonviing/paperhub/main/docs/images/dashboard.png" alt="PaperHub launcher dashboard showing the claude-cli provider, model and effort" width="820">
+</p>
+
+A real summary from the launcher (`claude-cli`, no API key):
+
+<p align="center">
+  <img src="https://raw.githubusercontent.com/vulonviing/paperhub/main/docs/images/summary.png" alt="PaperHub terminal output: motivation, method, findings, real-world examples and summary for one paper" width="820">
+</p>
+
 ## Install
 
 Supported platform: **macOS only**. Linux and Windows are not supported.
