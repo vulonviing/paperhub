@@ -65,6 +65,15 @@ Reasoning effort: `/effort` (or `--effort high`, `PAPERHUB_CLAUDE_CLI_EFFORT` /
 sets OpenAI's reasoning effort (`low|medium|high`). Effort is not part of the
 summary cache key, so cached summaries are reused across effort levels.
 
+**Security.** Paper text comes from the internet and is fed to an agent. PaperHub
+runs the CLIs with tools disabled where possible (Claude), from an empty temp
+directory, with the paper text marked as untrusted data, and with a scrubbed
+environment: only `PATH`, `HOME`, `CODEX_HOME`, locale and proxy/certificate
+variables are passed on, never your API keys or tokens. Add names to
+`PAPERHUB_CLI_PASS_ENV=NAME1,NAME2` if a custom setup needs more. Codex always
+has a shell and its read-only sandbox can still read files, so for PDFs you do
+not trust, prefer `claude-cli`.
+
 API keys are the fallback for notebooks, CI and servers where no CLI is
 installed.
 

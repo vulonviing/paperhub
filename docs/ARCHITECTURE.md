@@ -111,6 +111,11 @@ metadata: Claude uses fixed aliases and `--effort`; for Codex the default model
 comes from `$CODEX_HOME/config.toml`, the model list and per-model effort levels
 from `models_cache.json`, and effort is sent as `-c model_reasoning_effort=...`.
 
+CLI subprocesses get an allow-listed environment (`cli_client.clean_env`), the
+paper text is wrapped in per-call random-tag `UNTRUSTED PAPER TEXT` markers, and
+Codex runs with `--ignore-user-config`. Codex cannot be stripped of its shell, so
+treat these as defence in depth.
+
 PaperHub supports macOS only; `paperhub` exits with a message on any other
 platform and `import paperhub` emits a `RuntimeWarning` there.
 
