@@ -1,5 +1,8 @@
 # PaperHub
 
+[![PyPI version](https://img.shields.io/pypi/v/paperhub.svg)](https://pypi.org/project/paperhub/)
+[![Python versions](https://img.shields.io/pypi/pyversions/paperhub.svg)](https://pypi.org/project/paperhub/)
+
 PaperHub fetches HuggingFace Daily Papers by programmatic date filters, assigns
 each paper to its own AI summarization agent, and renders Jupyter-friendly
 summaries by default.
@@ -22,6 +25,8 @@ A real summary from the launcher (`claude-cli`, no API key):
 ## Install
 
 Supported platform: **macOS only**. Linux and Windows are not supported.
+
+Published package: [PaperHub on PyPI](https://pypi.org/project/paperhub/).
 
 ```bash
 pip install paperhub
